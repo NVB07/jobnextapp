@@ -93,6 +93,67 @@ export interface CVAnalysisResult {
     createdAt?: string;
 }
 
+// User Data interfaces
+export interface UserProfile {
+    Name?: string;
+    DOB?: string;
+    Phone_Number?: string;
+    Address?: string;
+    Email?: string;
+    LinkedInPortfolio?: string;
+    Career_objective?: string;
+    University?: string;
+    Major?: string;
+    GPA?: string;
+    Graduated_year?: string;
+    Job_position?: string;
+    Years_of_experience?: string;
+    Achievements_awards?: string;
+    Extracurricular_activities?: string;
+    Interests?: string;
+    Rank?: string;
+    Industry?: string;
+    Work_Experience?: string;
+    Projects?: string;
+    Skills?: string;
+    References?: string;
+}
+
+export interface UserData {
+    _id: string;
+    uid: string;
+    email: string;
+    displayName?: string;
+    userData?: {
+        recommend?: string | null;
+        PDF_CV_URL?: string | null;
+        profile?: UserProfile | null;
+    };
+    createdAt: string;
+    updatedAt: string;
+}
+
+// API Response interface for user data
+interface UserDataApiResponse {
+    success: boolean;
+    user: {
+        _id: string;
+        uid: string;
+        userData?: {
+            recommend?: string;
+            PDF_CV_URL?: string;
+            profile?: UserProfile;
+        };
+        createdAt: string;
+        updatedAt: string;
+    };
+    userRecord: {
+        email: string;
+        displayName?: string;
+        emailVerified: boolean;
+    };
+}
+
 // API Service Class
 class ApiService {
     private baseURL: string;
@@ -290,16 +351,54 @@ class ApiService {
     }
 
     async getCVAnalysisByUid(uid: string): Promise<CVAnalysisResult[]> {
+        const response = await this.request<ApiResponse<CVAnalysisResult[]>>(`/cv-analysis/user/${uid}`);
+        return response.data || [];
+    }
+
+    // User API methods
+    async getUserData(uid: string): Promise<UserData | null> {
         try {
-            const response = await this.request<ApiResponse<CVAnalysisResult[]>>(`/cv/${uid}`);
-            return response.data || response;
+            console.log(`🔍 Fetching user data for uid: ${uid}`);
+            const response = await this.request<UserDataApiResponse>(`/users/${uid}`);
+            console.log("🔍 Response:", response);
+
+            if (!response.success || !response.user) {
+                console.log("⚠️ No user data in response");
+                return null;
+            }
+
+            // Transform API response to match UserData interface
+            const userData: UserData = {
+                _id: response.user._id,
+                uid: response.user.uid,
+                email: response.userRecord.email,
+                displayName: response.userRecord.displayName,
+                userData: response.user.userData
+                    ? {
+                          recommend: response.user.userData.recommend || null,
+                          PDF_CV_URL: response.user.userData.PDF_CV_URL || null,
+                          profile: response.user.userData.profile || null,
+                      }
+                    : undefined,
+                createdAt: response.user.createdAt,
+                updatedAt: response.user.updatedAt,
+            };
+
+            console.log("✅ User data transformed:", {
+                uid: userData.uid,
+                hasRecommend: !!userData.userData?.recommend,
+                hasProfile: !!userData.userData?.profile,
+                hasPDF: !!userData.userData?.PDF_CV_URL,
+            });
+
+            return userData;
         } catch (error) {
-            console.error("Error fetching CV analysis:", error);
-            throw error;
+            console.error(`❌ Failed to fetch user data for uid: ${uid}`, error);
+            return null;
         }
     }
 
-    // Utility methods
+    // Health check
     async ping(): Promise<string> {
         try {
             const response = await this.request<string>("/ping");

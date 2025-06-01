@@ -10,6 +10,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { useAuth } from "@/contexts/AuthContext";
 import { apiService, Job } from "@/services/api";
 
 const { width } = Dimensions.get("window");
@@ -18,9 +19,12 @@ export default function JobsScreen() {
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? "light"];
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
     const [searchQuery, setSearchQuery] = useState("");
 
-    const [activeTab, setActiveTab] = useState<"search" | "recommended">("search");
+    // Determine if user is authenticated and can see recommended tab
+    const isAuthenticated = !!user;
+    const [activeTab, setActiveTab] = useState<"search" | "recommended">(isAuthenticated ? "search" : "search");
     const [searchJobs, setSearchJobs] = useState<Job[]>([]);
     const [searchLoading, setSearchLoading] = useState(true);
     const [searchLoadingMore, setSearchLoadingMore] = useState(false);
@@ -43,8 +47,15 @@ export default function JobsScreen() {
     useEffect(() => {
         fetchSearchJobs(1, true);
     }, []);
-    // Reset pagination when search query changes
 
+    // Reset active tab to search when user logs out
+    useEffect(() => {
+        if (!isAuthenticated && activeTab === "recommended") {
+            setActiveTab("search");
+        }
+    }, [isAuthenticated, activeTab]);
+
+    // Reset pagination when search query changes
     useEffect(() => {
         if (searchQuery) {
             setSearchCurrentPage(1);
@@ -110,67 +121,6 @@ export default function JobsScreen() {
         }
     };
 
-    // const fetchJobs = async (page: number = 1, reset: boolean = false) => {
-    //     try {
-    //         if (reset) {
-    //             setLoading(true);
-    //             setCurrentPage(1);
-    //         } else {
-    //             setLoadingMore(true);
-    //         }
-    //         setError(null);
-    //         console.log(`🔄 Fetching jobs from API (page ${page})...`);
-
-    //         const response = await apiService.getJobs({
-    //             page: page,
-    //             limit: 10, // Load 10 jobs per page
-    //         });
-
-    //         console.log("📊 Jobs API Response:", {
-    //             jobsCount: response.jobs?.length || 0,
-    //             totalJobs: response.totalJobs,
-    //             currentPage: response.currentPage,
-    //             totalPages: response.totalPages,
-    //             page: page,
-    //         });
-
-    //         if (reset) {
-    //             setJobs(response.jobs || []);
-    //             setCurrentPage(1);
-    //         } else {
-    //             // Filter out duplicates when loading more jobs
-    //             const newJobs = response.jobs || [];
-    //             console.log(`🔄 Loading more: ${newJobs.length} new jobs received`);
-
-    //             setJobs((prevJobs) => {
-    //                 const existingIds = new Set(prevJobs.map((job) => job._id));
-    //                 const uniqueNewJobs = newJobs.filter((job) => !existingIds.has(job._id));
-
-    //                 console.log(`📊 Jobs merge: ${prevJobs.length} existing + ${uniqueNewJobs.length} unique new = ${prevJobs.length + uniqueNewJobs.length} total`);
-
-    //                 if (uniqueNewJobs.length !== newJobs.length) {
-    //                     console.warn(`⚠️ Filtered out ${newJobs.length - uniqueNewJobs.length} duplicate jobs`);
-    //                 }
-
-    //                 return [...prevJobs, ...uniqueNewJobs];
-    //             });
-    //             setCurrentPage(page);
-    //         }
-
-    //         setTotalPages(response.totalPages || 1);
-    //         setHasMorePages(page < (response.totalPages || 1));
-    //     } catch (err) {
-    //         console.error("❌ Error fetching jobs:", err);
-    //         setError("Không thể tải danh sách việc làm. Vui lòng thử lại.");
-    //         // Don't clear jobs on error unless it's the first load
-    //         if (reset) {
-    //             setJobs([]);
-    //         }
-    //     } finally {
-    //         setLoading(false);
-    //         setLoadingMore(false);
-    //     }
-    // };
     const fetchRecommendedJobs = async (page: number = 1, reset: boolean = false) => {
         try {
             if (reset) {
@@ -450,6 +400,10 @@ export default function JobsScreen() {
                             ? "Đang tải..."
                             : activeTab === "search" && searchQuery
                             ? `${getCurrentJobs().length} kết quả tìm kiếm`
+                            : activeTab === "recommended"
+                            ? `${getCurrentJobs().length} / ${getCurrentTotalJobs()} gợi ý phù hợp • Trang ${getCurrentPage()}/${getCurrentTotalPages()}`
+                            : !isAuthenticated
+                            ? `${getCurrentJobs().length} / ${getCurrentTotalJobs()} việc làm • Đăng nhập để xem gợi ý phù hợp`
                             : `${getCurrentJobs().length} / ${getCurrentTotalJobs()} việc làm • Trang ${getCurrentPage()}/${getCurrentTotalPages()}`}
                     </ThemedText>
                 </View>
@@ -459,7 +413,11 @@ export default function JobsScreen() {
                         style={[
                             styles.tabButton,
                             activeTab === "search" && styles.activeTab,
-                            { backgroundColor: activeTab === "search" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.05)" },
+                            {
+                                backgroundColor: activeTab === "search" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.05)",
+                                flex: isAuthenticated ? 1 : 0,
+                                minWidth: isAuthenticated ? undefined : 120,
+                            },
                         ]}
                         onPress={() => setActiveTab("search")}
                         activeOpacity={0.8}
@@ -468,18 +426,20 @@ export default function JobsScreen() {
                         <ThemedText style={[styles.tabText, { color: activeTab === "search" ? "white" : "rgba(255,255,255,0.6)" }]}>Tìm kiếm</ThemedText>
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                        style={[
-                            styles.tabButton,
-                            activeTab === "recommended" && styles.activeTab,
-                            { backgroundColor: activeTab === "recommended" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.05)" },
-                        ]}
-                        onPress={() => setActiveTab("recommended")}
-                        activeOpacity={0.8}
-                    >
-                        <IconSymbol name="heart.fill" size={16} color={activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)"} />
-                        <ThemedText style={[styles.tabText, { color: activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)" }]}>Phù hợp</ThemedText>
-                    </TouchableOpacity>
+                    {isAuthenticated && (
+                        <TouchableOpacity
+                            style={[
+                                styles.tabButton,
+                                activeTab === "recommended" && styles.activeTab,
+                                { backgroundColor: activeTab === "recommended" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.05)" },
+                            ]}
+                            onPress={() => setActiveTab("recommended")}
+                            activeOpacity={0.8}
+                        >
+                            <IconSymbol name="heart.fill" size={16} color={activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)"} />
+                            <ThemedText style={[styles.tabText, { color: activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)" }]}>Phù hợp</ThemedText>
+                        </TouchableOpacity>
+                    )}
                 </View>
             </LinearGradient>
             {activeTab === "search" && (
@@ -928,6 +888,7 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         borderWidth: 1,
         borderColor: "rgba(255,255,255,0.1)",
+        minWidth: 100,
     },
     activeTab: {
         borderColor: "rgba(255,255,255,0.3)",

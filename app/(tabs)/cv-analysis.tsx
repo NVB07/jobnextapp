@@ -1,245 +1,398 @@
-import React, { useState } from "react";
-import { StyleSheet, ScrollView, TouchableOpacity, View, Alert, Dimensions, StatusBar } from "react-native";
+import React, { useState, useEffect } from "react";
+import { StyleSheet, ScrollView, View, StatusBar, Alert, TouchableOpacity, Modal, ActivityIndicator, Linking, Dimensions, Text } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import * as DocumentPicker from "expo-document-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
-import { ThemedText } from "@/components/ThemedText";
-import { ThemedView } from "@/components/ThemedView";
-import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { useAuth } from "@/contexts/AuthContext";
+import { apiService, UserData } from "@/services/api";
 
 const { width } = Dimensions.get("window");
 
-interface AnalysisResult {
-    overallScore: number;
-    categories: {
-        name: string;
-        score: number;
-        icon: string;
-        color: [string, string];
-        feedback: string;
-    }[];
-    recommendations: string[];
-    strengths: string[];
-}
-
 export default function CVAnalysisScreen() {
     const colorScheme = useColorScheme();
-    const colors = Colors[colorScheme ?? "light"];
     const insets = useSafeAreaInsets();
-    const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerResult | null>(null);
-    const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const { user } = useAuth();
 
-    const mockAnalysisResult: AnalysisResult = {
-        overallScore: 85,
-        categories: [
-            {
-                name: "Thông tin cá nhân",
-                score: 90,
-                icon: "person.circle.fill",
-                color: ["#10b981", "#34d399"] as [string, string],
-                feedback: "Thông tin liên hệ đầy đủ và chuyên nghiệp",
-            },
-            {
-                name: "Kinh nghiệm làm việc",
-                score: 85,
-                icon: "briefcase.fill",
-                color: ["#6366f1", "#8b5cf6"] as [string, string],
-                feedback: "Kinh nghiệm phong phú và liên quan đến vị trí",
-            },
-            {
-                name: "Kỹ năng",
-                score: 80,
-                icon: "star.fill",
-                color: ["#f59e0b", "#fbbf24"] as [string, string],
-                feedback: "Kỹ năng đa dạng nhưng cần cụ thể hóa thêm",
-            },
-            {
-                name: "Học vấn",
-                score: 88,
-                icon: "graduationcap.fill",
-                color: ["#8b5cf6", "#a78bfa"] as [string, string],
-                feedback: "Trình độ học vấn phù hợp với vị trí",
-            },
-        ],
-        recommendations: [
-            "Thêm các dự án cụ thể để minh chứng kỹ năng",
-            "Bổ sung chứng chỉ chuyên ngành liên quan",
-            "Cải thiện phần mô tả về thành tích đạt được",
-            "Tối ưu hóa từ khóa để phù hợp với ATS",
-        ],
-        strengths: ["Kinh nghiệm làm việc phong phú", "Kỹ năng đa dạng và cập nhật", "Trình bày rõ ràng, chuyên nghiệp", "Thông tin liên hệ đầy đủ"],
+    const [showCVModal, setShowCVModal] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [userData, setUserData] = useState<UserData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const tachNoiDungMarkdown = (md: string) => {
+        const parts = md.split(/\*\*LƯU Ý:\*\*/);
+        if (parts.length < 2) return { error: "Không tìm thấy phần III. LƯU Ý" };
+
+        const [beforeLuuY, luuY] = parts;
+        const [danhGia, deXuat] = beforeLuuY.split(/\*\*ĐỀ XUẤT CHỈNH SỬA CHI TIẾT:\*\*/);
+
+        if (!danhGia || !deXuat) return { error: "Không tìm thấy phần I hoặc II" };
+
+        return {
+            danhGiaChung: danhGia.trim(),
+            deXuatChinhSua: deXuat.trim(),
+            luuY: luuY.trim(),
+        };
     };
 
-    const pickDocument = async () => {
-        try {
-            const result = await DocumentPicker.getDocumentAsync({
-                type: ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
-                copyToCacheDirectory: true,
-            });
+    const fetchUserData = async () => {
+        if (!user?.uid) return;
 
-            if (!result.canceled && result.assets && result.assets.length > 0) {
-                setSelectedFile(result);
-                setAnalysisResult(null);
+        setError(null);
+        setLoading(true);
+
+        try {
+            console.log(`🔄 Fetching user data for uid: ${user.uid}`);
+            const data = await apiService.getUserData(user.uid);
+
+            if (data) {
+                console.log("✅ User data loaded successfully");
+                setUserData(data);
+            } else {
+                console.log("⚠️ No user data found");
+                setUserData(null);
             }
         } catch (error) {
-            Alert.alert("Lỗi", "Không thể chọn file CV");
+            console.error("❌ Error fetching user data:", error);
+            setError("Không thể tải dữ liệu người dùng. Vui lòng thử lại.");
+        } finally {
+            setLoading(false);
         }
     };
 
-    const analyzeCV = async () => {
-        if (!selectedFile || selectedFile.canceled) return;
+    // Helper function to get Vietnamese field names
+    const getVietnameseFieldName = (key: string): string => {
+        const fieldNames: { [key: string]: string } = {
+            Name: "Họ tên",
+            DOB: "Ngày sinh",
+            Phone_Number: "Số điện thoại",
+            Address: "Địa chỉ",
+            Email: "Email",
+            LinkedInPortfolio: "LinkedIn/Portfolio",
+            Career_objective: "Mục tiêu nghề nghiệp",
+            University: "Trường đại học",
+            Major: "Chuyên ngành",
+            GPA: "GPA",
+            Graduated_year: "Năm tốt nghiệp",
+            Job_position: "Vị trí công việc",
+            Years_of_experience: "Số năm kinh nghiệm",
+            Achievements_awards: "Thành tích & Giải thưởng",
+            Extracurricular_activities: "Hoạt động ngoại khóa",
+            Interests: "Sở thích",
+            Rank: "Cấp bậc",
+            Industry: "Ngành nghề",
+            Work_Experience: "Kinh nghiệm làm việc",
+            Projects: "Dự án",
+            Skills: "Kỹ năng",
+            References: "Người tham khảo",
+        };
 
-        setIsAnalyzing(true);
-        // Simulate analysis delay
-        setTimeout(() => {
-            setAnalysisResult(mockAnalysisResult);
-            setIsAnalyzing(false);
-        }, 2000);
+        return fieldNames[key] || key;
     };
 
-    const getScoreColor = (score: number): [string, string] => {
-        if (score >= 80) return ["#10b981", "#34d399"];
-        if (score >= 60) return ["#f59e0b", "#fbbf24"];
-        return ["#ef4444", "#f87171"];
-    };
+    useEffect(() => {
+        fetchUserData();
+    }, [user]);
 
-    const CategoryCard = ({ category }: { category: AnalysisResult["categories"][0] }) => (
-        <View style={[styles.categoryCard, { backgroundColor: colors.cardBackground }]}>
-            <View style={styles.categoryHeader}>
-                <LinearGradient colors={category.color} style={styles.categoryIcon}>
-                    <IconSymbol name={category.icon as any} size={20} color="white" />
+    const renderHeader = () => (
+        <LinearGradient colors={["#4F46E5", "#7C3AED", "#9333EA"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.header, { paddingTop: insets.top + 20 }]}>
+            <Text style={[styles.headerTitle, { color: Colors[colorScheme ?? "light"].background }]}>📊 Phân tích CV</Text>
+            <Text style={styles.headerSubtitle}>Phân tích chi tiết CV của bạn với AI thông minh</Text>
+        </LinearGradient>
+    );
+
+    if (!user) {
+        return (
+            <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
+
+                {renderHeader()}
+
+                <View style={styles.loginPrompt}>
+                    <Ionicons name="person-circle-outline" size={80} color="#9CA3AF" />
+                    <Text style={[styles.promptTitle, { color: Colors[colorScheme ?? "light"].text }]}>Vui lòng đăng nhập</Text>
+                    <Text style={[styles.promptSubtitle, { color: Colors[colorScheme ?? "light"].text }]}>Bạn cần đăng nhập để xem thông tin phân tích CV của mình</Text>
+                    <TouchableOpacity style={[styles.loginButton, { backgroundColor: Colors[colorScheme ?? "light"].tint }]} onPress={() => router.push("/login")}>
+                        <Text style={styles.loginButtonText}>Đăng nhập ngay</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
+    }
+
+    const renderOverviewCard = () => {
+        if (!userData?.userData?.recommend) return null;
+
+        const content = tachNoiDungMarkdown(userData.userData.recommend);
+
+        // Type guard to check if content has the expected structure
+        if ("error" in content) {
+            return null;
+        }
+
+        return (
+            <View style={[styles.card, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                <LinearGradient colors={["#059669", "#10B981"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardHeader}>
+                    <Text style={styles.cardTitle}>📈 Tổng quan đánh giá</Text>
+                    <Ionicons name="analytics" size={20} color="white" style={styles.cardIcon} />
                 </LinearGradient>
 
-                <View style={styles.categoryInfo}>
-                    <ThemedText style={[styles.categoryName, { color: colors.text }]}>{category.name}</ThemedText>
-                    <ThemedText style={[styles.categoryFeedback, { color: colors.icon }]}>{category.feedback}</ThemedText>
-                </View>
+                <View style={[styles.cardContent, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                    {content.danhGiaChung && (
+                        <View style={styles.section}>
+                            <View style={styles.recommendationContainer}>
+                                <Text style={[styles.generalText, { color: Colors[colorScheme ?? "light"].text }]}>{content.danhGiaChung}</Text>
+                            </View>
+                        </View>
+                    )}
 
-                <View style={styles.scoreContainer}>
-                    <ThemedText style={[styles.scoreText, { color: colors.text }]}>{category.score}</ThemedText>
-                    <View style={[styles.scoreBar, { backgroundColor: colors.border }]}>
-                        <LinearGradient colors={getScoreColor(category.score)} style={[styles.scoreProgress, { width: `${category.score}%` }]} />
+                    {content.deXuatChinhSua && (
+                        <View style={styles.section}>
+                            <Text style={[styles.sectionTitle, { color: "#059669" }]}>✅ Đề xuất</Text>
+                            <View style={styles.listContainer}>
+                                {content.deXuatChinhSua
+                                    .split("- ")
+                                    .filter((item: string) => item.trim())
+                                    .map((strength: string, index: number) => (
+                                        <View key={index} style={styles.listItem}>
+                                            <Text style={[styles.listText, { color: Colors[colorScheme ?? "light"].text }]}>• {strength.trim()}</Text>
+                                        </View>
+                                    ))}
+                            </View>
+                        </View>
+                    )}
+
+                    {content.luuY && (
+                        <View style={[styles.section, styles.sectionWithBorder]}>
+                            <Text style={[styles.sectionTitle, { color: "#DC2626" }]}>🎯 Gợi ý cải thiện</Text>
+                            <View style={styles.listContainer}>
+                                {content.luuY
+                                    .split("- ")
+                                    .filter((item: string) => item.trim())
+                                    .map((rec: string, index: number) => (
+                                        <View key={index} style={styles.listItem}>
+                                            <Text style={[styles.listText, { color: Colors[colorScheme ?? "light"].text }]}>• {rec.trim()}</Text>
+                                        </View>
+                                    ))}
+                            </View>
+                        </View>
+                    )}
+                </View>
+            </View>
+        );
+    };
+
+    const renderCVInfoCard = () => {
+        const profile = userData?.userData?.profile;
+        const pdfUrl = userData?.userData?.PDF_CV_URL;
+
+        return (
+            <View style={[styles.card, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                <LinearGradient colors={["#2563EB", "#3B82F6"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardHeader}>
+                    <Text style={styles.cardTitle}>📄 Thông tin CV</Text>
+                    <Ionicons name="document-text" size={20} color="white" style={styles.cardIcon} />
+                </LinearGradient>
+
+                <View style={[styles.cardContent, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                    <View style={styles.section}>
+                        <View style={styles.infoItem}>
+                            <Ionicons name="calendar" size={16} color="#6B7280" />
+                            <Text style={[styles.infoText, { color: Colors[colorScheme ?? "light"].text }]}>
+                                Cập nhật lần cuối: {new Date(userData?.updatedAt || "").toLocaleDateString("vi-VN")}
+                            </Text>
+                        </View>
+
+                        {profile?.Job_position && (
+                            <View style={styles.infoItem}>
+                                <Ionicons name="briefcase" size={16} color="#6B7280" />
+                                <Text style={[styles.infoText, { color: Colors[colorScheme ?? "light"].text }]}>Vị trí: {profile.Job_position}</Text>
+                            </View>
+                        )}
+
+                        {profile?.Years_of_experience && (
+                            <View style={styles.infoItem}>
+                                <Ionicons name="time" size={16} color="#6B7280" />
+                                <Text style={[styles.infoText, { color: Colors[colorScheme ?? "light"].text }]}>Kinh nghiệm: {profile.Years_of_experience}</Text>
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={[styles.section, styles.sectionWithBorder]}>
+                        <TouchableOpacity
+                            style={[styles.actionButton, { backgroundColor: pdfUrl ? "#059669" : "#9CA3AF" }]}
+                            onPress={() => setShowCVModal(true)}
+                            disabled={!pdfUrl}
+                        >
+                            <Ionicons name="eye" size={18} color="white" />
+                            <Text style={[styles.actionButtonText, { color: "white" }]}>{pdfUrl ? "Xem CV" : "Chưa có CV"}</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.actionButton, { backgroundColor: profile ? "#2563EB" : "#9CA3AF" }]}
+                            onPress={() => setShowProfileModal(true)}
+                            disabled={!profile}
+                        >
+                            <Ionicons name="person" size={18} color="white" />
+                            <Text style={[styles.actionButtonText, { color: "white" }]}>{profile ? "Xem thông tin" : "Chưa có thông tin"}</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </View>
-        </View>
-    );
+        );
+    };
+
+    if (loading) {
+        return (
+            <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
+
+                {renderHeader()}
+
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={Colors[colorScheme ?? "light"].tint} />
+                    <Text style={[styles.loadingText, { color: Colors[colorScheme ?? "light"].text }]}>Đang tải thông tin CV...</Text>
+                </View>
+            </View>
+        );
+    }
+
+    if (error) {
+        return (
+            <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
+
+                {renderHeader()}
+
+                <View style={styles.errorContainer}>
+                    <Ionicons name="alert-circle" size={80} color="#DC2626" />
+                    <Text style={[styles.errorTitle, { color: Colors[colorScheme ?? "light"].text }]}>Lỗi tải dữ liệu</Text>
+                    <Text style={[styles.errorMessage, { color: Colors[colorScheme ?? "light"].text }]}>{error}</Text>
+                    <TouchableOpacity style={[styles.retryButton, { backgroundColor: Colors[colorScheme ?? "light"].tint }]} onPress={fetchUserData}>
+                        <Ionicons name="refresh" size={20} color="white" />
+                        <Text style={styles.retryButtonText}>Thử lại</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
+    }
+
+    if (!userData?.userData?.recommend && !userData?.userData?.profile) {
+        return (
+            <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
+
+                {renderHeader()}
+
+                <View style={styles.noDataContainer}>
+                    <Ionicons name="document-outline" size={80} color="#9CA3AF" />
+                    <Text style={[styles.noDataTitle, { color: Colors[colorScheme ?? "light"].text }]}>Chưa có CV được phân tích</Text>
+                    <Text style={[styles.noDataSubtitle, { color: Colors[colorScheme ?? "light"].text }]}>
+                        Vui lòng tải lên CV để hệ thống có thể phân tích và đưa ra gợi ý cải thiện
+                    </Text>
+                    <TouchableOpacity
+                        style={[styles.uploadButton, { backgroundColor: Colors[colorScheme ?? "light"].tint }]}
+                        onPress={() => {
+                            Alert.alert("Tính năng đang phát triển", "Tính năng tải CV sẽ sớm có mặt!");
+                        }}
+                    >
+                        <Ionicons name="cloud-upload" size={20} color="white" />
+                        <Text style={styles.uploadButtonText}>Tạo CV mới</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
+    }
 
     return (
-        <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
             <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
 
-            {/* Header */}
-            <LinearGradient colors={colors.gradient} style={[styles.header, { paddingTop: insets.top }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                <View style={styles.headerContent}>
-                    <ThemedText style={styles.headerTitle}>Phân tích CV</ThemedText>
-                    <ThemedText style={styles.headerSubtitle}>Cải thiện CV để có cơ hội việc làm tốt hơn</ThemedText>
-                </View>
-            </LinearGradient>
+            {renderHeader()}
 
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
-                {/* Upload Section */}
-                <View style={styles.uploadSection}>
-                    <TouchableOpacity
-                        style={[styles.uploadArea, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
-                        onPress={pickDocument}
-                        activeOpacity={0.8}
-                    >
-                        <LinearGradient colors={colors.gradient} style={styles.uploadIcon}>
-                            <IconSymbol name="doc.text.fill" size={32} color="white" />
-                        </LinearGradient>
-
-                        <ThemedText style={[styles.uploadTitle, { color: colors.text }]}>
-                            {selectedFile && !selectedFile.canceled ? "CV đã chọn" : "Tải lên CV của bạn"}
-                        </ThemedText>
-
-                        {selectedFile && !selectedFile.canceled ? (
-                            <ThemedText style={[styles.fileName, { color: colors.success }]}>{selectedFile.assets[0].name}</ThemedText>
-                        ) : (
-                            <ThemedText style={[styles.uploadSubtitle, { color: colors.icon }]}>Hỗ trợ định dạng PDF, DOC, DOCX</ThemedText>
-                        )}
-                    </TouchableOpacity>
-
-                    {selectedFile && !selectedFile.canceled && !analysisResult && (
-                        <TouchableOpacity style={styles.analyzeButton} onPress={analyzeCV} disabled={isAnalyzing} activeOpacity={0.8}>
-                            <LinearGradient colors={colors.gradient} style={styles.analyzeGradient}>
-                                {isAnalyzing ? (
-                                    <View style={styles.analyzingContainer}>
-                                        <IconSymbol name="arrow.triangle.2.circlepath" size={20} color="white" />
-                                        <ThemedText style={styles.analyzeText}>Đang phân tích...</ThemedText>
-                                    </View>
-                                ) : (
-                                    <ThemedText style={styles.analyzeText}>Phân tích CV</ThemedText>
-                                )}
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    )}
-                </View>
-
-                {/* Analysis Results */}
-                {analysisResult && (
-                    <>
-                        {/* Overall Score */}
-                        <View style={styles.scoreSection}>
-                            <View style={[styles.scoreCard, { backgroundColor: colors.cardBackground }]}>
-                                <LinearGradient colors={getScoreColor(analysisResult.overallScore)} style={styles.overallScoreContainer}>
-                                    <ThemedText style={styles.overallScoreText}>{analysisResult.overallScore}</ThemedText>
-                                    <ThemedText style={styles.overallScoreLabel}>Điểm tổng</ThemedText>
-                                </LinearGradient>
-
-                                <View style={styles.scoreInfo}>
-                                    <ThemedText style={[styles.scoreTitle, { color: colors.text }]}>Chất lượng CV</ThemedText>
-                                    <ThemedText style={[styles.scoreDescription, { color: colors.icon }]}>
-                                        CV của bạn có chất lượng tốt và đáp ứng yêu cầu của nhà tuyển dụng
-                                    </ThemedText>
-                                </View>
-                            </View>
-                        </View>
-
-                        {/* Category Analysis */}
-                        <View style={styles.categoriesSection}>
-                            <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Phân tích chi tiết</ThemedText>
-
-                            {analysisResult.categories.map((category, index) => (
-                                <CategoryCard key={index} category={category} />
-                            ))}
-                        </View>
-
-                        {/* Strengths */}
-                        <View style={styles.strengthsSection}>
-                            <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Điểm mạnh</ThemedText>
-
-                            {analysisResult.strengths.map((strength, index) => (
-                                <View key={index} style={[styles.strengthItem, { backgroundColor: colors.cardBackground }]}>
-                                    <LinearGradient colors={["#10b981", "#34d399"] as [string, string]} style={styles.strengthIcon}>
-                                        <IconSymbol name="checkmark" size={12} color="white" />
-                                    </LinearGradient>
-                                    <ThemedText style={[styles.strengthText, { color: colors.text }]}>{strength}</ThemedText>
-                                </View>
-                            ))}
-                        </View>
-
-                        {/* Recommendations */}
-                        <View style={styles.recommendationsSection}>
-                            <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Đề xuất cải thiện</ThemedText>
-
-                            {analysisResult.recommendations.map((recommendation, index) => (
-                                <View key={index} style={[styles.recommendationItem, { backgroundColor: colors.cardBackground }]}>
-                                    <LinearGradient colors={["#f59e0b", "#fbbf24"] as [string, string]} style={styles.recommendationIcon}>
-                                        <IconSymbol name="lightbulb.fill" size={12} color="white" />
-                                    </LinearGradient>
-                                    <ThemedText style={[styles.recommendationText, { color: colors.text }]}>{recommendation}</ThemedText>
-                                </View>
-                            ))}
-                        </View>
-                    </>
-                )}
+            <ScrollView style={styles.content} contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 60 }]} showsVerticalScrollIndicator={false}>
+                {renderOverviewCard()}
+                {renderCVInfoCard()}
             </ScrollView>
-        </ThemedView>
+
+            {/* CV Modal */}
+            <Modal visible={showCVModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowCVModal(false)}>
+                <View style={[styles.modalContainer, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                    <View style={[styles.modalContent, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                        <View style={[styles.modalHeader, { borderBottomColor: Colors[colorScheme ?? "light"].border }]}>
+                            <Text style={[styles.modalTitle, { color: Colors[colorScheme ?? "light"].text }]}>Xem CV</Text>
+                            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowCVModal(false)}>
+                                <Ionicons name="close" size={24} color={Colors[colorScheme ?? "light"].text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {userData?.userData?.PDF_CV_URL && (
+                            <>
+                                <Text style={[styles.modalNote, { color: Colors[colorScheme ?? "light"].text }]}>
+                                    💡 CV sẽ được mở trong trình duyệt để có trải nghiệm xem tốt nhất
+                                </Text>
+
+                                <View style={styles.modalBody}>
+                                    <TouchableOpacity
+                                        style={[styles.openCVButton, { backgroundColor: "#059669" }]}
+                                        onPress={() => {
+                                            const pdfUrl = userData?.userData?.PDF_CV_URL;
+                                            if (pdfUrl) {
+                                                Linking.openURL(pdfUrl);
+                                                setShowCVModal(false);
+                                            }
+                                        }}
+                                    >
+                                        <Ionicons name="open" size={20} color="white" />
+                                        <Text style={styles.openCVButtonText}>Mở CV trong trình duyệt</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </>
+                        )}
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Profile Modal */}
+            <Modal visible={showProfileModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowProfileModal(false)}>
+                <View style={[styles.modalContainer, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                    <View style={[styles.modalContent, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                        <View style={[styles.modalHeader, { borderBottomColor: Colors[colorScheme ?? "light"].border }]}>
+                            <Text style={[styles.modalTitle, { color: Colors[colorScheme ?? "light"].text }]}>Thông tin cá nhân</Text>
+                            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowProfileModal(false)}>
+                                <Ionicons name="close" size={24} color={Colors[colorScheme ?? "light"].text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                            {userData?.userData?.profile ? (
+                                <View style={[styles.profileContainer, { borderColor: Colors[colorScheme ?? "light"].border }]}>
+                                    {Object.entries(userData.userData.profile)
+                                        .filter(([_, value]) => value && value.toString().trim() !== "")
+                                        .map(([key, value]) => (
+                                            <View key={key} style={[styles.profileItem, { borderBottomColor: Colors[colorScheme ?? "light"].border }]}>
+                                                <Text style={[styles.profileLabel, { color: "#6B7280" }]}>{getVietnameseFieldName(key)}</Text>
+                                                <Text style={[styles.profileValue, { color: Colors[colorScheme ?? "light"].text }]}>{value?.toString()}</Text>
+                                            </View>
+                                        ))}
+                                </View>
+                            ) : (
+                                <View style={styles.noProfileData}>
+                                    <Ionicons name="person-circle-outline" size={64} color="#9CA3AF" />
+                                    <Text style={[styles.noDataTitle, { color: Colors[colorScheme ?? "light"].text }]}>Chưa có thông tin cá nhân</Text>
+                                    <Text style={[styles.noDataSubtitle, { color: Colors[colorScheme ?? "light"].text }]}>
+                                        Dữ liệu thông tin cá nhân sẽ được hiển thị khi bạn tải lên CV
+                                    </Text>
+                                </View>
+                            )}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+        </View>
     );
 }
 
@@ -248,245 +401,348 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     header: {
-        paddingBottom: 24,
-        paddingHorizontal: 24,
-        borderBottomLeftRadius: 24,
-        borderBottomRightRadius: 24,
-    },
-    headerContent: {
+        paddingBottom: 20,
+        paddingHorizontal: 20,
+        borderBottomLeftRadius: 20,
+        borderBottomRightRadius: 20,
         alignItems: "center",
-        gap: 8,
     },
     headerTitle: {
-        paddingTop: 10,
-        fontSize: 28,
+        paddingTop: 8,
+        fontSize: 24,
         fontWeight: "bold",
         color: "white",
+        marginBottom: 6,
     },
     headerSubtitle: {
-        fontSize: 16,
-        color: "rgba(255,255,255,0.8)",
+        fontSize: 14,
+        color: "rgba(255,255,255,0.85)",
         textAlign: "center",
+        maxWidth: width * 0.8,
     },
     content: {
         flex: 1,
     },
-    uploadSection: {
-        padding: 24,
+    scrollContent: {
+        padding: 16,
         gap: 16,
     },
-    uploadArea: {
-        padding: 40,
-        borderRadius: 20,
-        borderWidth: 2,
-        borderStyle: "dashed",
-        alignItems: "center",
-        gap: 16,
-    },
-    uploadIcon: {
-        width: 80,
-        height: 80,
-        borderRadius: 24,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    uploadTitle: {
-        fontSize: 20,
-        fontWeight: "bold",
-        textAlign: "center",
-    },
-    uploadSubtitle: {
-        fontSize: 14,
-        textAlign: "center",
-    },
-    fileName: {
-        fontSize: 16,
-        fontWeight: "600",
-        textAlign: "center",
-    },
-    analyzeButton: {
-        borderRadius: 16,
-        overflow: "hidden",
-    },
-    analyzeGradient: {
-        padding: 18,
-        alignItems: "center",
-    },
-    analyzingContainer: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-    },
-    analyzeText: {
-        fontSize: 16,
-        fontWeight: "bold",
-        color: "white",
-    },
-    scoreSection: {
-        paddingHorizontal: 24,
-        marginBottom: 24,
-    },
-    scoreCard: {
-        flexDirection: "row",
-        padding: 24,
-        borderRadius: 20,
-        alignItems: "center",
-        gap: 20,
+    card: {
+        borderRadius: 12,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 6,
-    },
-    overallScoreContainer: {
-        width: 80,
-        height: 80,
-        borderRadius: 20,
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 4,
-    },
-    overallScoreText: {
-        fontSize: 24,
-        fontWeight: "bold",
-        color: "white",
-    },
-    overallScoreLabel: {
-        fontSize: 10,
-        color: "white",
-        opacity: 0.9,
-    },
-    scoreInfo: {
-        flex: 1,
-        gap: 8,
-    },
-    scoreTitle: {
-        fontSize: 18,
-        fontWeight: "bold",
-    },
-    scoreDescription: {
-        fontSize: 14,
-        lineHeight: 20,
-    },
-    categoriesSection: {
-        paddingHorizontal: 24,
-        marginBottom: 24,
-        gap: 16,
-    },
-    sectionTitle: {
-        fontSize: 20,
-        fontWeight: "bold",
-        marginBottom: 4,
-    },
-    categoryCard: {
-        padding: 20,
-        borderRadius: 16,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.08,
         shadowRadius: 8,
         elevation: 4,
+        overflow: "hidden",
     },
-    categoryHeader: {
+    cardHeader: {
+        padding: 14,
         flexDirection: "row",
         alignItems: "center",
-        gap: 16,
+        justifyContent: "space-between",
     },
-    categoryIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 12,
+    cardTitle: {
+        fontSize: 16,
+        fontWeight: "700",
+        color: "white",
+        flex: 1,
+    },
+    cardIcon: {
+        marginLeft: 8,
+    },
+    cardContent: {
+        padding: 16,
+        gap: 14,
+    },
+    section: {
+        gap: 10,
+    },
+    sectionWithBorder: {
+        paddingTop: 14,
+        borderTopWidth: 1,
+        borderTopColor: "rgba(0,0,0,0.08)",
+        marginTop: 14,
+    },
+    sectionTitle: {
+        fontSize: 15,
+        fontWeight: "700",
+        marginBottom: 6,
+        letterSpacing: 0.2,
+    },
+    listContainer: {
+        gap: 6,
+    },
+    listItem: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: 10,
+        paddingVertical: 2,
+        paddingHorizontal: 8,
+        backgroundColor: "rgba(0,0,0,0.02)",
+        borderRadius: 8,
+        marginVertical: 1,
+    },
+    listText: {
+        flex: 1,
+        fontSize: 13,
+        lineHeight: 18,
+        paddingVertical: 4,
+    },
+    generalText: {
+        fontSize: 14,
+        lineHeight: 20,
+        textAlign: "left",
+    },
+    actionButton: {
+        flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-    },
-    categoryInfo: {
-        flex: 1,
-        gap: 4,
-    },
-    categoryName: {
-        fontSize: 16,
-        fontWeight: "600",
-    },
-    categoryFeedback: {
-        fontSize: 12,
-        lineHeight: 16,
-    },
-    scoreContainer: {
-        alignItems: "center",
+        padding: 14,
+        borderRadius: 10,
         gap: 8,
-        minWidth: 60,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
+        elevation: 2,
     },
-    scoreText: {
+    actionButtonText: {
+        fontSize: 14,
+        fontWeight: "600",
+        letterSpacing: 0.3,
+    },
+    infoItem: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        paddingVertical: 6,
+        paddingHorizontal: 8,
+        backgroundColor: "rgba(0,0,0,0.02)",
+        borderRadius: 8,
+    },
+    infoText: {
+        fontSize: 13,
+        flex: 1,
+        lineHeight: 18,
+    },
+    recommendationContainer: {
+        padding: 14,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: "rgba(0,0,0,0.06)",
+        backgroundColor: "rgba(0,0,0,0.01)",
+    },
+    loginPrompt: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 32,
+        gap: 20,
+    },
+    promptTitle: {
+        fontSize: 22,
+        fontWeight: "bold",
+        textAlign: "center",
+        lineHeight: 28,
+    },
+    promptSubtitle: {
+        fontSize: 15,
+        textAlign: "center",
+        lineHeight: 22,
+        maxWidth: width * 0.85,
+    },
+    loginButton: {
+        paddingHorizontal: 28,
+        paddingVertical: 14,
+        borderRadius: 10,
+        marginTop: 16,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+        elevation: 4,
+    },
+    loginButtonText: {
+        color: "white",
+        fontSize: 15,
+        fontWeight: "700",
+        letterSpacing: 0.3,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        gap: 18,
+        padding: 32,
+    },
+    loadingText: {
+        fontSize: 15,
+        fontWeight: "600",
+        textAlign: "center",
+    },
+    noDataContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 32,
+        gap: 20,
+    },
+    noDataTitle: {
+        fontSize: 20,
+        fontWeight: "bold",
+        textAlign: "center",
+        lineHeight: 26,
+    },
+    noDataSubtitle: {
+        fontSize: 14,
+        textAlign: "center",
+        lineHeight: 20,
+        maxWidth: width * 0.8,
+    },
+    uploadButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 10,
+        gap: 8,
+        marginTop: 16,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+        elevation: 4,
+    },
+    uploadButtonText: {
+        color: "white",
+        fontSize: 14,
+        fontWeight: "700",
+        letterSpacing: 0.3,
+    },
+    errorContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 32,
+        gap: 18,
+    },
+    errorTitle: {
+        fontSize: 20,
+        fontWeight: "bold",
+        textAlign: "center",
+        lineHeight: 26,
+    },
+    errorMessage: {
+        fontSize: 14,
+        textAlign: "center",
+        lineHeight: 20,
+        maxWidth: width * 0.8,
+    },
+    retryButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        padding: 14,
+        borderRadius: 10,
+        gap: 8,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+        elevation: 4,
+    },
+    retryButtonText: {
+        color: "white",
+        fontSize: 14,
+        fontWeight: "700",
+        letterSpacing: 0.3,
+    },
+    modalContainer: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.5)",
+    },
+    modalContent: {
+        flex: 1,
+        marginTop: 60,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        overflow: "hidden",
+    },
+    modalHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: "rgba(0,0,0,0.08)",
+        backgroundColor: "rgba(0,0,0,0.02)",
+    },
+    modalTitle: {
         fontSize: 18,
         fontWeight: "bold",
     },
-    scoreBar: {
-        width: 60,
-        height: 4,
-        borderRadius: 2,
-        overflow: "hidden",
+    modalCloseButton: {
+        padding: 4,
+        borderRadius: 6,
     },
-    scoreProgress: {
-        height: "100%",
-        borderRadius: 2,
+    modalNote: {
+        fontSize: 13,
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        fontStyle: "italic",
+        backgroundColor: "rgba(255,193,7,0.1)",
+        borderBottomWidth: 1,
+        borderBottomColor: "rgba(0,0,0,0.06)",
     },
-    strengthsSection: {
-        paddingHorizontal: 24,
-        marginBottom: 24,
-        gap: 12,
+    modalBody: {
+        flex: 1,
+        padding: 20,
     },
-    strengthItem: {
+    openCVButton: {
         flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
         padding: 16,
         borderRadius: 12,
-        gap: 12,
+        gap: 8,
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+        elevation: 4,
     },
-    strengthIcon: {
-        width: 24,
-        height: 24,
-        borderRadius: 6,
-        alignItems: "center",
-        justifyContent: "center",
+    openCVButtonText: {
+        color: "white",
+        fontSize: 15,
+        fontWeight: "700",
+        letterSpacing: 0.3,
     },
-    strengthText: {
-        flex: 1,
-        fontSize: 14,
+    profileContainer: {
+        gap: 0,
+    },
+    profileItem: {
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderBottomWidth: 1,
+        gap: 6,
+        backgroundColor: "rgba(0,0,0,0.01)",
+    },
+    profileLabel: {
+        fontSize: 12,
+        fontWeight: "600",
+        letterSpacing: 0.5,
+        textTransform: "uppercase",
+    },
+    profileValue: {
+        fontSize: 15,
         lineHeight: 20,
     },
-    recommendationsSection: {
-        paddingHorizontal: 24,
-        paddingBottom: 100,
-        gap: 12,
-    },
-    recommendationItem: {
-        flexDirection: "row",
-        alignItems: "flex-start",
-        padding: 16,
-        borderRadius: 12,
-        gap: 12,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    recommendationIcon: {
-        width: 24,
-        height: 24,
-        borderRadius: 6,
-        alignItems: "center",
-        justifyContent: "center",
-        marginTop: 2,
-    },
-    recommendationText: {
+    noProfileData: {
         flex: 1,
-        fontSize: 14,
-        lineHeight: 20,
+        justifyContent: "center",
+        alignItems: "center",
+        gap: 20,
+        paddingVertical: 60,
     },
 });

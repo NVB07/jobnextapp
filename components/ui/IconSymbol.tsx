@@ -34,6 +34,20 @@ const MAPPING = {
     "person.2.fill": "group",
     "heart.fill": "favorite",
     "eye.fill": "visibility",
+    "person.circle": "account-circle",
+    "doc.text": "description",
+    "doc.text.fill": "description",
+    "plus.circle": "add-circle",
+    calendar: "event",
+    location: "place",
+    star: "star-border",
+    "checkmark.circle": "check-circle",
+    "exclamationmark.circle": "error",
+    lightbulb: "lightbulb",
+    "info.circle": "info",
+    "arrow.up.right.square": "open-in-new",
+    "newspaper.fill": "article",
+    "arrow.clockwise": "refresh",
 } as IconMapping;
 
 /**
