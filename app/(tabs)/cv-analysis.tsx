@@ -14,6 +14,7 @@ const { width } = Dimensions.get("window");
 
 export default function CVAnalysisScreen() {
     const colorScheme = useColorScheme();
+    const colors = Colors[colorScheme ?? "light"];
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
 
@@ -99,8 +100,8 @@ export default function CVAnalysisScreen() {
     }, [user]);
 
     const renderHeader = () => (
-        <LinearGradient colors={["#4F46E5", "#7C3AED", "#9333EA"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.header, { paddingTop: insets.top + 20 }]}>
-            <Text style={[styles.headerTitle, { color: Colors[colorScheme ?? "light"].background }]}>📊 Phân tích CV</Text>
+        <LinearGradient colors={colors.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.header, { paddingTop: insets.top }]}>
+            <Text style={[styles.headerTitle]}> Phân tích CV</Text>
             <Text style={styles.headerSubtitle}>Phân tích chi tiết CV của bạn với AI thông minh</Text>
         </LinearGradient>
     );

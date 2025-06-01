@@ -14,6 +14,7 @@ interface ApiResponse<T> {
         totalPages: number;
         totalJobs?: number;
         totalBlogs?: number;
+        totalCompanies?: number;
     };
 }
 
@@ -234,29 +235,35 @@ class ApiService {
         return response.data || [];
     }
 
-    async getTopCompanies(): Promise<
-        {
+    async getTopCompanies(): Promise<{
+        companies: Array<{
             name: string;
             jobCount: number;
             logo?: string;
-        }[]
-    > {
+        }>;
+        totalCompanies: number;
+    }> {
         const response = await this.request<
             ApiResponse<
-                {
+                Array<{
                     company: string;
                     totalJobs: number;
                     companyLogo?: string;
-                }[]
+                }>
             >
         >("/jobs/stats/top-companies");
 
         // Transform the response to match expected format
-        return (response.data || []).map((item) => ({
+        const companies = (response.data || []).map((item) => ({
             name: item.company,
             jobCount: item.totalJobs,
             logo: item.companyLogo,
         }));
+
+        return {
+            companies,
+            totalCompanies: response.pagination?.totalCompanies || companies.length,
+        };
     }
 
     async getRecommendedJobs(params?: { page?: number; limit?: number }): Promise<{

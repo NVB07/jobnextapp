@@ -1,5 +1,5 @@
-import React from "react";
-import { StyleSheet, ScrollView, TouchableOpacity, View, Dimensions, StatusBar } from "react-native";
+import React, { useState, useEffect } from "react";
+import { StyleSheet, ScrollView, TouchableOpacity, View, Dimensions, StatusBar, ActivityIndicator, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { router } from "expo-router";
@@ -10,6 +10,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { apiService } from "@/services/api";
 
 const { width } = Dimensions.get("window");
 
@@ -17,6 +18,18 @@ export default function HomeScreen() {
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? "light"];
     const insets = useSafeAreaInsets();
+
+    // States for API data
+    const [totalJobs, setTotalJobs] = useState<number>(0);
+    const [totalCompanies, setTotalCompanies] = useState<number>(0);
+    const [topCompanies, setTopCompanies] = useState<
+        Array<{
+            name: string;
+            jobCount: number;
+            logo?: string;
+        }>
+    >([]);
+    const [loading, setLoading] = useState(true);
 
     const quickActions = [
         {
@@ -49,26 +62,83 @@ export default function HomeScreen() {
         },
     ];
 
+    // Fetch home page data
+    useEffect(() => {
+        const fetchHomeData = async () => {
+            try {
+                setLoading(true);
+
+                // Fetch total jobs count from jobs API (has pagination data)
+                const jobsResponse = await apiService.getJobs({ page: 1, limit: 1 });
+                setTotalJobs(jobsResponse.totalJobs || 0);
+
+                // Fetch top companies data
+                const companiesResponse = await apiService.getTopCompanies();
+                console.log("companiesResponse", companiesResponse);
+                setTopCompanies(companiesResponse.companies.slice(0, 10)); // Lấy 10 công ty top
+                setTotalCompanies(companiesResponse.totalCompanies || 0);
+            } catch (error) {
+                console.error("Error fetching home data:", error);
+                // Set fallback values
+                setTotalJobs(0);
+                setTotalCompanies(0);
+                setTopCompanies([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchHomeData();
+    }, []);
+
+    const formatNumber = (num: number): string => {
+        if (num >= 1000) {
+            return (num / 1000).toFixed(1) + "K";
+        }
+        return num.toString();
+    };
+
+    // Component để hiển thị logo công ty với fallback
+    const CompanyLogo = ({ logoUrl, companyName }: { logoUrl?: string; companyName: string }) => {
+        const [imageError, setImageError] = useState(false);
+
+        if (!logoUrl || imageError) {
+            return (
+                <LinearGradient colors={["#6366f1", "#8b5cf6"]} style={[styles.companyLogoContainer, styles.fallbackLogo]}>
+                    <IconSymbol name="building.2.fill" size={24} color="white" />
+                </LinearGradient>
+            );
+        }
+
+        return (
+            <View style={styles.companyLogoContainer}>
+                <Image source={{ uri: logoUrl }} style={styles.companyLogo} resizeMode="contain" onError={() => setImageError(true)} />
+            </View>
+        );
+    };
+
     return (
         <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
             <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
 
+            <LinearGradient colors={colors.gradient} style={[styles.heroSection, { paddingTop: insets.top }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                <View style={styles.heroContent}>
+                    <Image source={require("../../assets/images/icon.png")} style={styles.logo} resizeMode="contain" />
+                    <View style={{ gap: 1 }}>
+                        <ThemedText style={styles.welcomeText}> JobNext!</ThemedText>
+                        <ThemedText style={styles.heroSubtitle}>Hỗ trợ ứng viên tìm kiếm việc làm và phát triển sự nghiệp</ThemedText>
+                    </View>
+                    {/* Search Bar */}
+                </View>
+                <TouchableOpacity style={styles.heroSearchBar} onPress={() => router.push("/(tabs)/jobs")}>
+                    <BlurView intensity={20} style={styles.searchBlur}>
+                        <IconSymbol name="magnifyingglass" size={20} color="#fff" />
+                        <ThemedText style={styles.searchPlaceholder}>Tìm kiếm việc làm...</ThemedText>
+                    </BlurView>
+                </TouchableOpacity>
+            </LinearGradient>
             <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
                 {/* Hero Section */}
-                <LinearGradient colors={colors.gradient} style={[styles.heroSection, { paddingTop: insets.top }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                    <View style={styles.heroContent}>
-                        <ThemedText style={styles.welcomeText}> JobNext!</ThemedText>
-                        <ThemedText style={styles.heroSubtitle}>Tìm kiếm cơ hội nghề nghiệp và phát triển sự nghiệp của bạn</ThemedText>
-
-                        {/* Search Bar */}
-                        <TouchableOpacity style={styles.heroSearchBar} onPress={() => router.push("/(tabs)/jobs")}>
-                            <BlurView intensity={20} style={styles.searchBlur}>
-                                <IconSymbol name="magnifyingglass" size={20} color="rgba(255,255,255,0.8)" />
-                                <ThemedText style={styles.searchPlaceholder}>Tìm kiếm việc làm...</ThemedText>
-                            </BlurView>
-                        </TouchableOpacity>
-                    </View>
-                </LinearGradient>
 
                 {/* Quick Actions */}
                 <View style={styles.actionsSection}>
@@ -101,7 +171,11 @@ export default function HomeScreen() {
                                 <IconSymbol name="briefcase.fill" size={20} color="white" />
                             </LinearGradient>
                             <View>
-                                <ThemedText style={[styles.statNumber, { color: colors.text }]}>1,234</ThemedText>
+                                {loading ? (
+                                    <ActivityIndicator size="small" color={colors.tint} />
+                                ) : (
+                                    <ThemedText style={[styles.statNumber, { color: colors.text }]}>{formatNumber(totalJobs)}</ThemedText>
+                                )}
                                 <ThemedText style={[styles.statLabel, { color: colors.icon }]}>Việc làm</ThemedText>
                             </View>
                         </View>
@@ -111,51 +185,51 @@ export default function HomeScreen() {
                                 <IconSymbol name="building.2.fill" size={20} color="white" />
                             </LinearGradient>
                             <View>
-                                <ThemedText style={[styles.statNumber, { color: colors.text }]}>567</ThemedText>
+                                {loading ? (
+                                    <ActivityIndicator size="small" color={colors.tint} />
+                                ) : (
+                                    <ThemedText style={[styles.statNumber, { color: colors.text }]}>{formatNumber(totalCompanies)}</ThemedText>
+                                )}
                                 <ThemedText style={[styles.statLabel, { color: colors.icon }]}>Công ty</ThemedText>
-                            </View>
-                        </View>
-
-                        <View style={styles.statItem}>
-                            <LinearGradient colors={["#f59e0b", "#fbbf24"]} style={styles.statIcon}>
-                                <IconSymbol name="person.2.fill" size={20} color="white" />
-                            </LinearGradient>
-                            <View>
-                                <ThemedText style={[styles.statNumber, { color: colors.text }]}>89K</ThemedText>
-                                <ThemedText style={[styles.statLabel, { color: colors.icon }]}>Ứng viên</ThemedText>
                             </View>
                         </View>
                     </View>
                 </View>
 
-                {/* Featured Jobs */}
+                {/* Top Companies */}
                 <View style={styles.featuredSection}>
                     <View style={styles.sectionHeader}>
-                        <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Việc làm nổi bật</ThemedText>
-                        <TouchableOpacity onPress={() => router.push("/(tabs)/jobs")}>
+                        <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Top công ty tuyển dụng</ThemedText>
+                        {/* <TouchableOpacity onPress={() => router.push("/(tabs)/jobs")}>
                             <ThemedText style={[styles.seeAll, { color: colors.tint }]}>Xem tất cả</ThemedText>
-                        </TouchableOpacity>
+                        </TouchableOpacity> */}
                     </View>
 
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        {[
-                            { title: "React Native Developer", company: "TechCorp Vietnam", salary: "20-30 triệu", color: ["#6366f1", "#8b5cf6"] as [string, string] },
-                            { title: "UI/UX Designer", company: "DesignStudio", salary: "18-28 triệu", color: ["#10b981", "#34d399"] as [string, string] },
-                            { title: "Frontend Developer", company: "StartupX", salary: "15-25 triệu", color: ["#f59e0b", "#fbbf24"] as [string, string] },
-                        ].map((job, index) => (
-                            <View key={index} style={[styles.jobCard, { backgroundColor: colors.cardBackground }]}>
-                                <LinearGradient colors={job.color} style={styles.jobIconContainer}>
-                                    <IconSymbol name="building.2.fill" size={20} color="white" />
-                                </LinearGradient>
+                    {loading ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="large" color={colors.tint} />
+                        </View>
+                    ) : (
+                        <ScrollView style={{ backgroundColor: colors.background }} horizontal showsHorizontalScrollIndicator={false}>
+                            {topCompanies.map((company, index) => (
+                                <TouchableOpacity
+                                    key={index}
+                                    style={[styles.companyCard, { backgroundColor: colors.cardBackground }]}
+                                    onPress={() => router.push("/(tabs)/jobs")}
+                                    activeOpacity={0.8}
+                                >
+                                    <View style={styles.companyIconContainer}>
+                                        <CompanyLogo logoUrl={company.logo} companyName={company.name} />
+                                    </View>
 
-                                <ThemedText style={[styles.jobTitle, { color: colors.text }]} numberOfLines={2}>
-                                    {job.title}
-                                </ThemedText>
-                                <ThemedText style={[styles.jobCompany, { color: colors.icon }]}>{job.company}</ThemedText>
-                                <ThemedText style={[styles.jobSalary, { color: colors.success }]}>{job.salary}</ThemedText>
-                            </View>
-                        ))}
-                    </ScrollView>
+                                    <ThemedText style={[styles.companyTitle, { color: colors.text }]} numberOfLines={2}>
+                                        {company.name}
+                                    </ThemedText>
+                                    <ThemedText style={[styles.companyJobCount, { color: colors.success }]}>{formatNumber(company.jobCount)} vị trí</ThemedText>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    )}
                 </View>
             </ScrollView>
         </ThemedView>
@@ -166,17 +240,24 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
+    logo: {
+        width: 76,
+        height: 76,
+        marginBottom: 5,
+        borderRadius: 12,
+    },
     scrollView: {
         flex: 1,
     },
     heroSection: {
-        paddingBottom: 40,
+        paddingBottom: 20,
         paddingHorizontal: 24,
         borderBottomLeftRadius: 32,
         borderBottomRightRadius: 32,
     },
     heroContent: {
         alignItems: "center",
+        flexDirection: "row",
         gap: 16,
     },
     welcomeText: {
@@ -184,17 +265,18 @@ const styles = StyleSheet.create({
         fontSize: 32,
         fontWeight: "bold",
         color: "white",
-        textAlign: "center",
+        textAlign: "left",
         textShadowColor: "rgba(0,0,0,0.1)",
         textShadowOffset: { width: 0, height: 2 },
         textShadowRadius: 4,
     },
     heroSubtitle: {
+        paddingRight: 10,
         fontSize: 16,
         color: "rgba(255,255,255,0.9)",
-        textAlign: "center",
-        lineHeight: 24,
-        maxWidth: 280,
+        textAlign: "left",
+        maxWidth: 260,
+        lineHeight: 20,
     },
     heroSearchBar: {
         width: "100%",
@@ -217,6 +299,7 @@ const styles = StyleSheet.create({
         padding: 24,
     },
     sectionTitle: {
+        paddingTop: 10,
         fontSize: 24,
         fontWeight: "bold",
         marginBottom: 20,
@@ -271,6 +354,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 12,
         elevation: 6,
+        gap: 40,
     },
     statItem: {
         alignItems: "center",
@@ -306,7 +390,12 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: "600",
     },
-    jobCard: {
+    loadingContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    companyCard: {
         width: 200,
         padding: 20,
         borderRadius: 16,
@@ -317,25 +406,46 @@ const styles = StyleSheet.create({
         shadowRadius: 12,
         elevation: 6,
     },
-    jobIconContainer: {
+    companyIconContainer: {
+        width: 64,
+        height: 64,
+        borderRadius: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 16,
+        padding: 8,
+    },
+    companyLogoContainer: {
         width: 48,
         height: 48,
         borderRadius: 12,
         alignItems: "center",
         justifyContent: "center",
-        marginBottom: 16,
+        backgroundColor: "white",
+        borderWidth: 2,
+        borderColor: "rgba(255,255,255,0.3)",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
     },
-    jobTitle: {
+    fallbackLogo: {
+        backgroundColor: "rgba(255,255,255,0.2)",
+        borderColor: "rgba(255,255,255,0.3)",
+    },
+    companyLogo: {
+        width: 40,
+        height: 40,
+        borderRadius: 8,
+    },
+    companyTitle: {
         fontSize: 16,
         fontWeight: "600",
         marginBottom: 8,
         lineHeight: 22,
     },
-    jobCompany: {
-        fontSize: 14,
-        marginBottom: 8,
-    },
-    jobSalary: {
+    companyJobCount: {
         fontSize: 14,
         fontWeight: "600",
     },
