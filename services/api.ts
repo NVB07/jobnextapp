@@ -1,6 +1,8 @@
+import ENV from "../config/env";
+
 // For development, use your computer's IP address
 // Replace with your actual IP address when testing on device
-const API_BASE_URL = "https://jobnext-server.onrender.com";
+const API_BASE_URL = ENV.API_URL;
 
 interface ApiResponse<T> {
     success: boolean;

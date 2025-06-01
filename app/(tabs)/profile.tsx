@@ -8,6 +8,8 @@ import { ThemedView } from "@/components/ThemedView";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { useAuth } from "../../contexts/AuthContext";
+import { useAuthGuard } from "../../hooks/useAuthGuard";
 
 const { width } = Dimensions.get("window");
 
@@ -33,6 +35,15 @@ export default function ProfileScreen() {
     const insets = useSafeAreaInsets();
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
     const [darkModeEnabled, setDarkModeEnabled] = useState(colorScheme === "dark");
+
+    // Authentication guard
+    const { user, loading, isAuthenticated } = useAuthGuard();
+    const { signOut } = useAuth();
+
+    // Show loading if still checking auth
+    if (loading || !isAuthenticated) {
+        return <ThemedView style={styles.container} />;
+    }
 
     const userStats: UserStats = {
         applications: 23,
@@ -74,10 +85,20 @@ export default function ProfileScreen() {
         Alert.alert("Cài đặt", `Bạn đã chọn: ${setting}`);
     };
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
         Alert.alert("Đăng xuất", "Bạn có chắc muốn đăng xuất khỏi ứng dụng?", [
             { text: "Hủy", style: "cancel" },
-            { text: "Đăng xuất", style: "destructive", onPress: () => {} },
+            {
+                text: "Đăng xuất",
+                style: "destructive",
+                onPress: async () => {
+                    try {
+                        await signOut();
+                    } catch (error) {
+                        Alert.alert("Lỗi", "Không thể đăng xuất. Vui lòng thử lại.");
+                    }
+                },
+            },
         ]);
     };
 
@@ -150,7 +171,7 @@ export default function ProfileScreen() {
                     </LinearGradient>
 
                     <View style={styles.userInfo}>
-                        <ThemedText style={styles.userName}>Nguyễn Văn A</ThemedText>
+                        <ThemedText style={styles.userName}>{user?.displayName || user?.email || "Người dùng"}</ThemedText>
                         <ThemedText style={styles.userTitle}>React Native Developer</ThemedText>
                         <ThemedText style={styles.userLocation}>Hồ Chí Minh, Việt Nam</ThemedText>
                     </View>
