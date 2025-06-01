@@ -1,26 +1,40 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Modern color scheme with gradients and beautiful UI colors
  */
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorLight = "#6366f1"; // Modern indigo
+const tintColorDark = "#818cf8";
+const primaryGradient: [string, string] = ["#6366f1", "#8b5cf6"]; // Indigo to purple gradient
 
 export const Colors = {
-  light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
-  },
-  dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
-  },
+    light: {
+        text: "#1f2937",
+        background: "#f8fafc",
+        tint: tintColorLight,
+        icon: "#6b7280",
+        tabIconDefault: "#9ca3af",
+        tabIconSelected: tintColorLight,
+        border: "#e5e7eb",
+        cardBackground: "#ffffff",
+        success: "#10b981",
+        warning: "#f59e0b",
+        error: "#ef4444",
+        gradient: primaryGradient,
+        shadow: "#000000",
+    },
+    dark: {
+        text: "#f9fafb",
+        background: "#0f172a",
+        tint: tintColorDark,
+        icon: "#9ca3af",
+        tabIconDefault: "#6b7280",
+        tabIconSelected: tintColorDark,
+        border: "#374151",
+        cardBackground: "#1e293b",
+        success: "#34d399",
+        warning: "#fbbf24",
+        error: "#f87171",
+        gradient: ["#818cf8", "#a78bfa"] as [string, string],
+        shadow: "#000000",
+    },
 };
