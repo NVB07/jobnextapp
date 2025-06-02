@@ -47,7 +47,7 @@ export default function HomeScreen() {
             route: "/(tabs)/cv-analysis" as const,
         },
         {
-            title: "Blog nghề nghiệp",
+            title: "Cẩm nang nghề nghiệp",
             subtitle: "Học hỏi kinh nghiệm",
             icon: "newspaper.fill" as const,
             gradient: ["#f59e0b", "#fbbf24"] as [string, string],

@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { StyleSheet, ScrollView, TouchableOpacity, View, Alert, Dimensions, StatusBar, Image, Share, Linking } from "react-native";
+import React, { useState, useEffect } from "react";
+import { StyleSheet, ScrollView, TouchableOpacity, View, Alert, Dimensions, StatusBar, Image, Share, Linking, Animated } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,7 +10,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import { Job } from "@/services/api";
+import { Job, JobWithDetail, apiService } from "@/services/api";
 
 const { width } = Dimensions.get("window");
 
@@ -20,10 +20,120 @@ export default function JobDetailScreen() {
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
 
-    // Parse job data from params
-    const job: Job = params.jobData ? JSON.parse(params.jobData as string) : null;
+    // Parse job data from params - now supports detailed job data
+    const initialJob: Job = params.jobData ? JSON.parse(params.jobData as string) : null;
+    const canLoadDetails = params.canLoadDetails === "true";
+
+    // State for detailed job information
+    const [job, setJob] = useState<JobWithDetail>(initialJob);
+    const [loadingDetails, setLoadingDetails] = useState(false);
+    const [detailsError, setDetailsError] = useState<string | null>(null);
+
     const [imageError, setImageError] = useState(false);
     const [isBookmarked, setIsBookmarked] = useState(false);
+
+    // Animated values for loading effects
+    const [spinAnimation] = useState(new Animated.Value(0));
+    const [fadeAnimation] = useState(new Animated.Value(0));
+    const [shimmerAnimation] = useState(new Animated.Value(0));
+
+    // Start animations
+    const startLoadingAnimations = () => {
+        // Spinning animation for loading indicator
+        Animated.loop(
+            Animated.timing(spinAnimation, {
+                toValue: 1,
+                duration: 1000,
+                useNativeDriver: true,
+            })
+        ).start();
+
+        // Shimmer animation for placeholder content
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(shimmerAnimation, {
+                    toValue: 1,
+                    duration: 1000,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(shimmerAnimation, {
+                    toValue: 0,
+                    duration: 1000,
+                    useNativeDriver: true,
+                }),
+            ])
+        ).start();
+
+        // Start with hidden content
+        fadeAnimation.setValue(0);
+    };
+
+    // Stop animations and fade in content
+    const stopLoadingAnimations = () => {
+        spinAnimation.stopAnimation();
+        shimmerAnimation.stopAnimation();
+
+        // Fade in the new content
+        Animated.timing(fadeAnimation, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    // Load detailed job information
+    useEffect(() => {
+        const loadJobDetails = async () => {
+            // Skip API call if:
+            // - Can't load details
+            // - No URL available
+            // - Already have detailed data
+            // - Job source is "admin" (already has complete info)
+            if (!canLoadDetails || !initialJob?.url || job.detailedDescription || initialJob?.jobSource === "admin") {
+                console.log("ℹ️ Skipping API call:", {
+                    canLoadDetails,
+                    hasUrl: !!initialJob?.url,
+                    hasDetailedDescription: !!job.detailedDescription,
+                    jobSource: initialJob?.jobSource,
+                });
+                return;
+            }
+
+            try {
+                setLoadingDetails(true);
+                setDetailsError(null);
+                startLoadingAnimations();
+                console.log(`🔄 Loading detailed job info for: ${initialJob.url}`);
+
+                const jobDetailResponse = await apiService.getJobDetail(initialJob.url);
+                console.log("📊 Job Detail Response:", jobDetailResponse);
+
+                // Check if API call was successful
+                if (jobDetailResponse.success && jobDetailResponse.data) {
+                    const { jobDescription, jobRequirements } = jobDetailResponse.data;
+                    // Update job with detailed information
+                    setJob((prevJob) => ({
+                        ...prevJob,
+                        detailedDescription: jobDescription,
+                        detailedRequirements: jobRequirements,
+                    }));
+                    console.log("✅ Job details loaded successfully");
+                    stopLoadingAnimations();
+                } else {
+                    setDetailsError(jobDetailResponse.error || jobDetailResponse.message || "Không thể tải thông tin chi tiết");
+                    stopLoadingAnimations();
+                }
+            } catch (err) {
+                console.error("❌ Error loading job details:", err);
+                setDetailsError("Không thể tải thông tin chi tiết. Vui lòng thử lại.");
+                stopLoadingAnimations();
+            } finally {
+                setLoadingDetails(false);
+            }
+        };
+
+        loadJobDetails();
+    }, [canLoadDetails, initialJob?.url, initialJob?.jobSource]);
 
     if (!job) {
         return (
@@ -140,6 +250,51 @@ export default function JobDetailScreen() {
 
     const skills = getSkills();
 
+    // Helper function to format and clean text content
+    const formatJobContent = (content: string) => {
+        if (!content) return "";
+        return content
+            .replace(/\r\n/g, "\n") // Normalize line endings
+            .replace(/\r/g, "\n") // Normalize line endings
+            .replace(/\n\s*\n\s*\n/g, "\n\n") // Replace multiple newlines with double newlines
+            .replace(/^\s+|\s+$/g, "") // Trim leading/trailing whitespace
+            .replace(/[ \t]+/g, " ") // Replace multiple spaces/tabs with single space
+            .trim();
+    };
+
+    // Get job description - prioritize detailed description from API
+    const getJobDescription = () => {
+        if (job.detailedDescription) {
+            return formatJobContent(job.detailedDescription);
+        }
+        if (job.description) {
+            return formatJobContent(job.description);
+        }
+        if (job.jobRequirement) {
+            return formatJobContent(job.jobRequirement.replace(/<[^>]+>/g, " "));
+        }
+        return "Chưa có mô tả công việc";
+    };
+
+    // Get job requirements - use detailed requirements from API or fallback to existing data
+    const getJobRequirements = () => {
+        console.log("🔍 Job Requirements Debug:", {
+            hasDetailedRequirements: !!job.detailedRequirements,
+            hasJobRequirement: !!job.jobRequirement,
+            detailedRequirements: job.detailedRequirements?.slice(0, 100),
+            jobRequirement: job.jobRequirement?.slice(0, 100),
+            jobSource: job.jobSource,
+        });
+
+        if (job.detailedRequirements) {
+            return formatJobContent(job.detailedRequirements);
+        }
+        if (job.jobRequirement) {
+            return formatJobContent(job.jobRequirement.replace(/<[^>]+>/g, " "));
+        }
+        return null;
+    };
+
     return (
         <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
             <StatusBar barStyle="light-content" />
@@ -171,9 +326,11 @@ export default function JobDetailScreen() {
                 <View style={styles.jobHeaderInfo}>
                     <CompanyLogo />
                     <View style={styles.jobHeaderText}>
-                        <ThemedText style={styles.jobHeaderTitle} numberOfLines={0}>
-                            {job.title || "Chưa có tiêu đề"}
-                        </ThemedText>
+                        <View style={styles.titleRow}>
+                            <ThemedText style={styles.jobHeaderTitle} numberOfLines={0}>
+                                {job.title || "Chưa có tiêu đề"}
+                            </ThemedText>
+                        </View>
                         <ThemedText style={styles.jobHeaderCompany} numberOfLines={1} ellipsizeMode="tail">
                             {job.company || "Chưa có tên công ty"}
                         </ThemedText>
@@ -188,22 +345,24 @@ export default function JobDetailScreen() {
                                 <IconSymbol name="clock.fill" size={10} color="rgba(255,255,255,0.8)" />
                                 <ThemedText style={styles.jobHeaderMetaText}>{formatExpiryDate(job.expiredOn || job.deadline)}</ThemedText>
                             </View>
+                            {job.jobSource && (
+                                <View style={styles.jobHeaderMetaItem}>
+                                    <IconSymbol name="globe" size={10} color="rgba(255,255,255,0.8)" />
+                                    <ThemedText style={styles.jobHeaderMetaText}>{job.jobSource}</ThemedText>
+                                </View>
+                            )}
                         </View>
                     </View>
                 </View>
             </LinearGradient>
 
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}>
+            <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom }]}>
                 {/* Compact Salary & Level Card */}
                 <View style={[styles.salaryCard, { backgroundColor: colors.cardBackground }]}>
                     <View style={styles.salarySection}>
                         <View style={styles.salaryInfo}>
                             <ThemedText style={[styles.salaryLabel, { color: colors.icon }]}>Mức lương</ThemedText>
                             <ThemedText style={[styles.salary, { color: colors.success }]}>{formatSalary(job.salary)}</ThemedText>
-                        </View>
-                        <View style={[styles.levelBadge, { backgroundColor: colors.warning + "15" }]}>
-                            <IconSymbol name="star.fill" size={12} color={colors.warning} />
-                            <ThemedText style={[styles.levelText, { color: colors.warning }]}>{job.jobLevelVI || job.level || job.jobLevel || "Entry"}</ThemedText>
                         </View>
                     </View>
 
@@ -247,17 +406,158 @@ export default function JobDetailScreen() {
                 )}
 
                 {/* Compact Job Description */}
-                {(job.description || job.jobRequirement) && (
+                {(job.description || job.jobRequirement || job.detailedDescription || loadingDetails) && (
                     <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
                         <View style={styles.sectionHeader}>
                             <IconSymbol name="doc.text.fill" size={16} color={colors.tint} />
                             <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Mô tả công việc</ThemedText>
+
+                            {/* Show admin badge for admin jobs */}
+
+                            {/* Show loading indicator for external jobs */}
+                            {loadingDetails && job.jobSource !== "admin" && (
+                                <View style={styles.loadingIndicator}>
+                                    <Animated.View
+                                        style={{
+                                            transform: [
+                                                {
+                                                    rotate: spinAnimation.interpolate({
+                                                        inputRange: [0, 1],
+                                                        outputRange: ["0deg", "360deg"],
+                                                    }),
+                                                },
+                                            ],
+                                        }}
+                                    >
+                                        <IconSymbol name="arrow.clockwise" size={14} color={colors.tint} />
+                                    </Animated.View>
+                                    <ThemedText style={[styles.loadingText, { color: colors.tint }]}>Đang tải chi tiết...</ThemedText>
+                                </View>
+                            )}
                         </View>
-                        <View style={[styles.descriptionContainer, { backgroundColor: colors.background }]}>
-                            <ThemedText style={[styles.description, { color: colors.text }]}>
-                                {job.description || job.jobRequirement?.replace(/<[^>]+>/g, " ").trim() || "Chưa có mô tả"}
-                            </ThemedText>
+
+                        {detailsError && !job.detailedDescription && (
+                            <View style={[styles.errorBanner, { backgroundColor: colors.warning + "15" }]}>
+                                <IconSymbol name="exclamationmark.triangle" size={14} color={colors.warning} />
+                                <ThemedText style={[styles.errorText, { color: colors.warning }]}>{detailsError}</ThemedText>
+                            </View>
+                        )}
+
+                        <Animated.View
+                            style={[
+                                styles.descriptionContainer,
+                                {
+                                    backgroundColor: colors.background,
+                                    opacity: job.detailedDescription ? fadeAnimation : 1,
+                                },
+                            ]}
+                        >
+                            {getJobDescription()
+                                .split("\n")
+                                .map((paragraph, index) =>
+                                    paragraph.trim() ? (
+                                        <ThemedText key={index} style={[styles.description, { color: colors.text }]}>
+                                            {paragraph.trim()}
+                                        </ThemedText>
+                                    ) : (
+                                        <View key={index} style={{ height: 8 }} />
+                                    )
+                                )}
+                        </Animated.View>
+                    </View>
+                )}
+
+                {/* Job Requirements Section */}
+                {(getJobRequirements() || job.jobRequirement || loadingDetails) && (
+                    <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
+                        <View style={styles.sectionHeader}>
+                            <IconSymbol name="checklist" size={16} color={colors.success} />
+                            <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Yêu cầu công việc</ThemedText>
+
+                            {/* Show loading indicator for external jobs */}
+                            {loadingDetails && !job.detailedRequirements && job.jobSource !== "admin" && (
+                                <View style={styles.loadingIndicator}>
+                                    <Animated.View
+                                        style={{
+                                            transform: [
+                                                {
+                                                    rotate: spinAnimation.interpolate({
+                                                        inputRange: [0, 1],
+                                                        outputRange: ["0deg", "360deg"],
+                                                    }),
+                                                },
+                                            ],
+                                        }}
+                                    >
+                                        <IconSymbol name="arrow.clockwise" size={14} color={colors.tint} />
+                                    </Animated.View>
+                                    <ThemedText style={[styles.loadingText, { color: colors.tint }]}>Đang tải...</ThemedText>
+                                </View>
+                            )}
                         </View>
+
+                        {detailsError && !job.detailedRequirements && (
+                            <View style={[styles.errorBanner, { backgroundColor: colors.warning + "15" }]}>
+                                <IconSymbol name="exclamationmark.triangle" size={14} color={colors.warning} />
+                                <ThemedText style={[styles.errorText, { color: colors.warning }]}>{detailsError}</ThemedText>
+                            </View>
+                        )}
+
+                        {loadingDetails && !job.detailedRequirements && job.jobSource !== "admin" ? (
+                            <Animated.View
+                                style={[
+                                    styles.descriptionContainer,
+                                    {
+                                        backgroundColor: colors.background,
+                                        opacity: shimmerAnimation.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0.6, 1],
+                                        }),
+                                    },
+                                ]}
+                            >
+                                <ThemedText style={[styles.description, { color: colors.icon }]}>Đang tải thông tin yêu cầu công việc chi tiết...</ThemedText>
+                            </Animated.View>
+                        ) : getJobRequirements() ? (
+                            <Animated.View
+                                style={[
+                                    styles.descriptionContainer,
+                                    {
+                                        backgroundColor: colors.background,
+                                        opacity: job.detailedRequirements ? fadeAnimation : 1,
+                                    },
+                                ]}
+                            >
+                                {getJobRequirements()
+                                    ?.split("\n")
+                                    .map((paragraph, index) =>
+                                        paragraph.trim() ? (
+                                            <ThemedText key={index} style={[styles.description, { color: colors.text }]}>
+                                                {paragraph.trim()}
+                                            </ThemedText>
+                                        ) : (
+                                            <View key={index} style={{ height: 8 }} />
+                                        )
+                                    )}
+                            </Animated.View>
+                        ) : (
+                            <View style={[styles.descriptionContainer, { backgroundColor: colors.background }]}>
+                                <ThemedText style={[styles.description, { color: colors.icon }]}>Chưa có thông tin yêu cầu công việc chi tiết</ThemedText>
+                            </View>
+                        )}
+                    </View>
+                )}
+
+                {/* Contact Information Section - Only for Admin Jobs */}
+                {job.jobSource === "admin" && (job.contactEmail || job.contact || job.contactPhone) && (
+                    <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
+                        <View style={styles.sectionHeader}>
+                            <IconSymbol name="person.circle.fill" size={16} color={colors.warning} />
+                            <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Thông tin liên hệ</ThemedText>
+                        </View>
+                        <ThemedText style={[styles.description, { color: colors.text }]} numberOfLines={2} ellipsizeMode="tail">
+                            {job.contactEmail || job.contact || "Chưa có thông tin"}
+                        </ThemedText>
                     </View>
                 )}
 
@@ -265,7 +565,9 @@ export default function JobDetailScreen() {
                 <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
                     <View style={styles.sectionHeader}>
                         <IconSymbol name="person.circle.fill" size={16} color={colors.tint} />
-                        <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Thông tin liên hệ</ThemedText>
+                        <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>
+                            {job.jobSource === "admin" ? "Thông tin công việc" : "Thông tin chi tiết"}
+                        </ThemedText>
                     </View>
 
                     <View style={styles.contactInfo}>
@@ -275,7 +577,7 @@ export default function JobDetailScreen() {
                             </View>
                             <View style={styles.contactDetails}>
                                 <ThemedText style={[styles.contactLabel, { color: colors.icon }]}>Công ty</ThemedText>
-                                <ThemedText style={[styles.contactValue, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">
+                                <ThemedText style={[styles.contactValue, { color: colors.text }]} numberOfLines={2} ellipsizeMode="tail">
                                     {job.company || "Chưa có thông tin"}
                                 </ThemedText>
                             </View>
@@ -287,21 +589,50 @@ export default function JobDetailScreen() {
                             </View>
                             <View style={styles.contactDetails}>
                                 <ThemedText style={[styles.contactLabel, { color: colors.icon }]}>Địa điểm</ThemedText>
-                                <ThemedText style={[styles.contactValue, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">
+                                <ThemedText style={[styles.contactValue, { color: colors.text }]} numberOfLines={2} ellipsizeMode="tail">
                                     {job.location || job.locationVI || "Remote"}
                                 </ThemedText>
                             </View>
                         </View>
 
-                        {job.contactEmail && (
+                        {/* Only show contact info for non-admin jobs */}
+                        {job.jobSource !== "admin" && (job.contactEmail || job.contact) && (
                             <View style={[styles.contactItem, { backgroundColor: colors.background }]}>
                                 <View style={[styles.contactIcon, { backgroundColor: colors.warning + "15" }]}>
                                     <IconSymbol name="envelope.fill" size={16} color={colors.warning} />
                                 </View>
                                 <View style={styles.contactDetails}>
-                                    <ThemedText style={[styles.contactLabel, { color: colors.icon }]}>Email</ThemedText>
+                                    <ThemedText style={[styles.contactLabel, { color: colors.icon }]}>Liên hệ</ThemedText>
+                                    <ThemedText style={[styles.contactValue, { color: colors.text }]} numberOfLines={2} ellipsizeMode="tail">
+                                        {job.contactEmail || job.contact || "Chưa có thông tin"}
+                                    </ThemedText>
+                                </View>
+                            </View>
+                        )}
+
+                        {job.jobSource !== "admin" && job.contactPhone && (
+                            <View style={[styles.contactItem, { backgroundColor: colors.background }]}>
+                                <View style={[styles.contactIcon, { backgroundColor: "#10b981" + "15" }]}>
+                                    <IconSymbol name="phone.fill" size={16} color="#10b981" />
+                                </View>
+                                <View style={styles.contactDetails}>
+                                    <ThemedText style={[styles.contactLabel, { color: colors.icon }]}>Điện thoại</ThemedText>
                                     <ThemedText style={[styles.contactValue, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">
-                                        {job.contactEmail}
+                                        {job.contactPhone}
+                                    </ThemedText>
+                                </View>
+                            </View>
+                        )}
+
+                        {(job.groupJobFunctionV3NameVI || job.category) && (
+                            <View style={[styles.contactItem, { backgroundColor: colors.background }]}>
+                                <View style={[styles.contactIcon, { backgroundColor: "#8b5cf6" + "15" }]}>
+                                    <IconSymbol name="tag.fill" size={16} color="#8b5cf6" />
+                                </View>
+                                <View style={styles.contactDetails}>
+                                    <ThemedText style={[styles.contactLabel, { color: colors.icon }]}>Lĩnh vực</ThemedText>
+                                    <ThemedText style={[styles.contactValue, { color: colors.text }]} numberOfLines={2} ellipsizeMode="tail">
+                                        {job.groupJobFunctionV3NameVI || job.category || "Chưa phân loại"}
                                     </ThemedText>
                                 </View>
                             </View>
@@ -424,12 +755,11 @@ const styles = StyleSheet.create({
         fontWeight: "bold",
     },
     levelBadge: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
+        paddingVertical: 2,
+        paddingHorizontal: 4,
         borderRadius: 12,
         flexDirection: "row",
         alignItems: "center",
-        gap: 6,
     },
     levelText: {
         fontSize: 12,
@@ -497,8 +827,11 @@ const styles = StyleSheet.create({
     },
     description: {
         fontSize: 14,
-        lineHeight: 20,
+        lineHeight: 22,
         fontWeight: "400",
+        textAlign: "left",
+        paddingVertical: 4,
+        marginBottom: 4,
     },
     contactInfo: {
         gap: 12,
@@ -630,6 +963,45 @@ const styles = StyleSheet.create({
     backButtonText: {
         color: "white",
         fontSize: 14,
+        fontWeight: "600",
+    },
+    titleRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    detailBadge: {
+        padding: 4,
+        borderRadius: 8,
+        backgroundColor: "#10b981",
+    },
+    loadingIndicator: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    loadingText: {
+        fontSize: 12,
+        fontWeight: "500",
+    },
+    errorBanner: {
+        padding: 12,
+        borderRadius: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 12,
+    },
+    adminBadge: {
+        padding: 4,
+        borderRadius: 8,
+        backgroundColor: "#10b981",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+    },
+    adminBadgeText: {
+        fontSize: 12,
         fontWeight: "600",
     },
 });

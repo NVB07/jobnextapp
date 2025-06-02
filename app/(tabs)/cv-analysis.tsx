@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: "rgba(255,255,255,0.85)",
         textAlign: "center",
-        maxWidth: width * 0.8,
+        maxWidth: width * 0.7,
     },
     content: {
         flex: 1,

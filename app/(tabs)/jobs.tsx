@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, ScrollView, TouchableOpacity, View, TextInput, Alert, Dimensions, StatusBar, ActivityIndicator, Image, Animated } from "react-native";
+import { StyleSheet, ScrollView, TouchableOpacity, View, TextInput, Alert, Dimensions, StatusBar, ActivityIndicator, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,7 +11,120 @@ import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiService, Job } from "@/services/api";
+import { apiService, Job, JobWithDetail } from "@/services/api";
+
+// Filter constants
+const vietnameseProvinces = [
+    "Tất cả",
+    "An Giang",
+    "Bà Rịa - Vũng Tàu",
+    "Bắc Giang",
+    "Bắc Kạn",
+    "Bạc Liêu",
+    "Bắc Ninh",
+    "Bến Tre",
+    "Bình Định",
+    "Bình Dương",
+    "Bình Phước",
+    "Bình Thuận",
+    "Cà Mau",
+    "Cần Thơ",
+    "Cao Bằng",
+    "Đà Nẵng",
+    "Đắk Lắk",
+    "Đắk Nông",
+    "Điện Biên",
+    "Đồng Nai",
+    "Đồng Tháp",
+    "Gia Lai",
+    "Hà Giang",
+    "Hà Nam",
+    "Hà Nội",
+    "Hồ Chí Minh",
+    "Hà Tĩnh",
+    "Hải Dương",
+    "Hải Phòng",
+    "Hậu Giang",
+    "Hòa Bình",
+    "Hưng Yên",
+    "Khánh Hòa",
+    "Kiên Giang",
+    "Kon Tum",
+    "Lai Châu",
+    "Lâm Đồng",
+    "Lạng Sơn",
+    "Lào Cai",
+    "Long An",
+    "Nam Định",
+    "Nghệ An",
+    "Ninh Bình",
+    "Ninh Thuận",
+    "Phú Thọ",
+    "Phú Yên",
+    "Quảng Bình",
+    "Quảng Nam",
+    "Quảng Ngãi",
+    "Quảng Ninh",
+    "Quảng Trị",
+    "Sóc Trăng",
+    "Sơn La",
+    "Tây Ninh",
+    "Thái Bình",
+    "Thái Nguyên",
+    "Thanh Hóa",
+    "Thừa Thiên Huế",
+    "Tiền Giang",
+    "Trà Vinh",
+    "Tuyên Quang",
+    "Vĩnh Long",
+    "Vĩnh Phúc",
+    "Yên Bái",
+    "Quốc tế",
+    "Khác",
+];
+
+const jobCategoriesMap = {
+    "": "Tất cả",
+    "Academic/Education": "Học thuật/Giáo dục",
+    "Accounting/Auditing": "Kế toán/Kiểm toán",
+    "Administration/Office Support": "Hành chính/Hỗ trợ văn phòng",
+    "Agriculture/Livestock/Fishery": "Nông nghiệp/Chăn nuôi/Thủy sản",
+    "Architecture/Construction": "Kiến trúc/Xây dựng",
+    "Art, Media & Printing/Publishing": "Nghệ thuật, Truyền thông & In ấn/Xuất bản",
+    "Banking & Financial Services": "Ngân hàng & Dịch vụ tài chính",
+    "CEO & General Management": "CEO & Quản lý chung",
+    "Customer Service": "Dịch vụ khách hàng",
+    Design: "Thiết kế",
+    "Engineering & Sciences": "Kỹ thuật & Khoa học",
+    "Food and Beverage": "Thực phẩm và Đồ uống",
+    "Government/NGO": "Chính phủ/Tổ chức phi chính phủ",
+    "Healthcare/Medical Services": "Chăm sóc sức khỏe/Dịch vụ y tế",
+    "Hospitality/Tourism": "Khách sạn/Du lịch",
+    "Human Resources/Recruitment": "Nhân sự/Tuyển dụng",
+    "Information Technology/Telecommunications": "Công nghệ thông tin/Viễn thông",
+    Insurance: "Bảo hiểm",
+    Legal: "Pháp lý",
+    "Logistics/Import Export/Warehouse": "Hậu cần/Xuất nhập khẩu/Kho bãi",
+    Manufacturing: "Sản xuất",
+    "Marketing, Advertising/Communications": "Marketing, Quảng cáo/Truyền thông",
+    Pharmacy: "Dược phẩm",
+    "Real Estate": "Bất động sản",
+    "Retail/Consumer Products": "Bán lẻ/Sản phẩm tiêu dùng",
+    Sales: "Bán hàng",
+    Technician: "Kỹ thuật viên",
+    "Textiles, Garments/Footwear": "Dệt may, May mặc/Giày dép",
+    Transportation: "Vận tải",
+    Others: "Khác",
+};
+
+const experienceLevelsMap = {
+    "": "Tất cả",
+    "Intern/Student": "Thực tập sinh/Sinh viên",
+    "Fresher/Entry level": "Mới tốt nghiệp/Mới vào nghề",
+    "Experienced (non-manager)": "Có kinh nghiệm (không phải quản lý)",
+    Manager: "Quản lý",
+    "Director and above": "Giám đốc trở lên",
+};
 
 const { width } = Dimensions.get("window");
 
@@ -21,6 +134,11 @@ export default function JobsScreen() {
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const [searchQuery, setSearchQuery] = useState("");
+
+    // Filter states
+    const [location, setLocation] = useState("");
+    const [jobCategory, setJobCategory] = useState("");
+    const [experienceLevel, setExperienceLevel] = useState("");
 
     // Determine if user is authenticated and can see recommended tab
     const isAuthenticated = !!user;
@@ -43,10 +161,6 @@ export default function JobsScreen() {
     const [recommendedTotalPages, setRecommendedTotalPages] = useState(1);
     const [recommendedHasMorePages, setRecommendedHasMorePages] = useState(false);
 
-    // Animation values for tab transitions
-    const [searchInputAnimation] = useState(new Animated.Value(1));
-    const [recommendButtonAnimation] = useState(new Animated.Value(1));
-
     // Fetch jobs from API
     useEffect(() => {
         fetchSearchJobs(1, true);
@@ -67,44 +181,21 @@ export default function JobsScreen() {
         }
     }, [searchQuery]);
 
+    // Auto search when filters change (only if there are active search criteria)
+    useEffect(() => {
+        if (activeTab === "search") {
+            if (searchQuery.trim() || location || jobCategory || experienceLevel) {
+                performSearch();
+            } else {
+                // When all criteria are cleared, fetch all jobs
+                fetchSearchJobs(1, true);
+            }
+        }
+    }, [location, jobCategory, experienceLevel]);
+
     useEffect(() => {
         if (activeTab === "recommended" && recommendedJobs.length === 0) {
             fetchRecommendedJobs(1, true);
-        }
-    }, [activeTab]);
-
-    // Handle tab animations
-    useEffect(() => {
-        const duration = 300;
-
-        if (activeTab === "search") {
-            // Expand search input, shrink recommend button
-            Animated.parallel([
-                Animated.timing(searchInputAnimation, {
-                    toValue: 1,
-                    duration,
-                    useNativeDriver: false,
-                }),
-                Animated.timing(recommendButtonAnimation, {
-                    toValue: 0.5,
-                    duration,
-                    useNativeDriver: false,
-                }),
-            ]).start();
-        } else {
-            // Shrink search input, expand recommend button
-            Animated.parallel([
-                Animated.timing(searchInputAnimation, {
-                    toValue: 0.5,
-                    duration,
-                    useNativeDriver: false,
-                }),
-                Animated.timing(recommendButtonAnimation, {
-                    toValue: 1,
-                    duration,
-                    useNativeDriver: false,
-                }),
-            ]).start();
         }
     }, [activeTab]);
 
@@ -119,9 +210,11 @@ export default function JobsScreen() {
             setSearchError(null);
             console.log(`🔄 Fetching search jobs from API (page ${page})...`);
 
-            const response = await apiService.getJobs({
+            // Use searchJobsWithFilters API for all search tab requests
+            const response = await apiService.searchJobsWithFilters({
                 page: page,
-                limit: 10,
+                perPage: 10,
+                uid: user?.uid,
             });
 
             console.log("📊 Search Jobs API Response:", {
@@ -217,7 +310,47 @@ export default function JobsScreen() {
     const loadMoreSearchJobs = () => {
         if (!searchLoadingMore && searchHasMorePages) {
             const nextPage = searchCurrentPage + 1;
-            fetchSearchJobs(nextPage, false);
+
+            // If there are active search criteria, use performSearch logic
+            if (searchQuery.trim() || location || jobCategory || experienceLevel) {
+                // Load more with current search criteria
+                const loadMoreWithFilters = async () => {
+                    try {
+                        setSearchLoadingMore(true);
+
+                        const searchParams: any = {
+                            page: nextPage,
+                            perPage: 20,
+                            uid: user?.uid,
+                        };
+
+                        if (searchQuery.trim()) searchParams.skill = searchQuery.trim();
+                        if (location) searchParams.location = location;
+                        if (jobCategory) searchParams.category = jobCategory;
+                        if (experienceLevel) searchParams.jobLevel = experienceLevel;
+
+                        const response = await apiService.searchJobsWithFilters(searchParams);
+
+                        const newJobs = response.jobs || [];
+                        setSearchJobs((prevJobs) => {
+                            const existingIds = new Set(prevJobs.map((job) => job._id));
+                            const uniqueNewJobs = newJobs.filter((job) => !existingIds.has(job._id));
+                            return [...prevJobs, ...uniqueNewJobs];
+                        });
+
+                        setSearchCurrentPage(nextPage);
+                        setSearchHasMorePages(nextPage < (response.totalPages || 1));
+                    } catch (err) {
+                        console.error("❌ Error loading more search jobs:", err);
+                    } finally {
+                        setSearchLoadingMore(false);
+                    }
+                };
+                loadMoreWithFilters();
+            } else {
+                // Use regular fetchSearchJobs for non-filtered results
+                fetchSearchJobs(nextPage, false);
+            }
         }
     };
 
@@ -229,25 +362,37 @@ export default function JobsScreen() {
     };
 
     const performSearch = async () => {
-        if (!searchQuery.trim()) {
-            fetchSearchJobs(1, true);
-            return;
-        }
-
         try {
             setSearchLoading(true);
             setSearchCurrentPage(1);
             setSearchHasMorePages(false);
-            console.log("🔍 Searching jobs with query:", searchQuery);
+            console.log("🔍 Searching jobs with query:", searchQuery, "Filters:", { location, jobCategory, experienceLevel });
 
-            const results = await apiService.searchJobs(searchQuery);
+            // Create search parameters for searchJobsWithFilters API
+            const searchParams: any = {
+                page: 1,
+                perPage: 20,
+                uid: user?.uid, // Add user uid for personalized search
+            };
+
+            if (searchQuery.trim()) searchParams.skill = searchQuery.trim();
+            if (location) searchParams.location = location;
+            if (jobCategory) searchParams.category = jobCategory;
+            if (experienceLevel) searchParams.jobLevel = experienceLevel;
+
+            // Use searchJobsWithFilters API with filters
+            const response = await apiService.searchJobsWithFilters(searchParams);
 
             console.log("📊 Search Results:", {
-                resultsCount: results?.length || 0,
+                resultsCount: response.jobs?.length || 0,
                 query: searchQuery,
+                filters: searchParams,
             });
 
-            setSearchJobs(results || []);
+            setSearchJobs(response.jobs || []);
+            setSearchTotalJobs(response.totalJobs || 0);
+            setSearchTotalPages(response.totalPages || 1);
+            setSearchHasMorePages(response.currentPage < response.totalPages);
         } catch (err) {
             console.error("❌ Error searching jobs:", err);
             setSearchError("Không thể tìm kiếm việc làm. Vui lòng thử lại.");
@@ -256,14 +401,24 @@ export default function JobsScreen() {
         }
     };
 
-    const handleViewDetail = (job: Job) => {
-        router.push({
-            pathname: "/job-detail",
-            params: {
-                jobId: job._id,
-                jobData: JSON.stringify(job),
-            },
-        });
+    const handleViewDetail = async (job: Job) => {
+        try {
+            // Check if job has URL for detailed loading
+            const canLoadDetails = !!job.url;
+
+            // Navigate immediately with available data
+            router.push({
+                pathname: "/job-detail",
+                params: {
+                    jobId: job._id,
+                    jobData: JSON.stringify(job),
+                    canLoadDetails: canLoadDetails.toString(),
+                },
+            });
+        } catch (err) {
+            console.error("❌ Error navigating to job detail:", err);
+            Alert.alert("Lỗi", "Không thể mở trang chi tiết việc làm. Vui lòng thử lại.");
+        }
     };
 
     const getJobGradient = (index: number): [string, string] => {
@@ -426,6 +581,94 @@ export default function JobsScreen() {
     const getCurrentLoadMore = () => (activeTab === "search" ? loadMoreSearchJobs : loadMoreRecommendedJobs);
     const getCurrentRetry = () => (activeTab === "search" ? () => fetchSearchJobs(1, true) : () => fetchRecommendedJobs(1, true));
 
+    // Count active filters
+    const activeFiltersCount = [location, jobCategory, experienceLevel].filter(Boolean).length;
+
+    // Filter handlers
+    const showLocationFilter = () => {
+        Alert.alert(
+            "Chọn địa điểm",
+            "",
+            [
+                ...vietnameseProvinces.map((province) => ({
+                    text: province,
+                    onPress: () => setLocation(province === "Tất cả" ? "" : province),
+                })),
+                { text: "Hủy", style: "cancel" },
+            ],
+            { cancelable: true }
+        );
+    };
+
+    const showJobCategoryFilter = () => {
+        Alert.alert(
+            "Chọn ngành nghề",
+            "",
+            [
+                ...Object.entries(jobCategoriesMap).map(([key, value]) => ({
+                    text: value,
+                    onPress: () => setJobCategory(key),
+                })),
+                { text: "Hủy", style: "cancel" },
+            ],
+            { cancelable: true }
+        );
+    };
+
+    const showExperienceLevelFilter = () => {
+        Alert.alert(
+            "Chọn kinh nghiệm",
+            "",
+            [
+                ...Object.entries(experienceLevelsMap).map(([key, value]) => ({
+                    text: value,
+                    onPress: () => setExperienceLevel(key),
+                })),
+                { text: "Hủy", style: "cancel" },
+            ],
+            { cancelable: true }
+        );
+    };
+
+    const showFiltersMenu = () => {
+        Alert.alert(
+            "Bộ lọc tìm kiếm",
+            "Chọn loại bộ lọc bạn muốn thiết lập",
+            [
+                {
+                    text: `📍 Địa điểm${location ? `: ${location}` : ""}`,
+                    onPress: showLocationFilter,
+                },
+                {
+                    text: `💼 Ngành nghề${jobCategory ? `: ${jobCategoriesMap[jobCategory as keyof typeof jobCategoriesMap]}` : ""}`,
+                    onPress: showJobCategoryFilter,
+                },
+                {
+                    text: `⭐ Kinh nghiệm${experienceLevel ? `: ${experienceLevelsMap[experienceLevel as keyof typeof experienceLevelsMap]}` : ""}`,
+                    onPress: showExperienceLevelFilter,
+                },
+                ...(activeFiltersCount > 0
+                    ? [
+                          {
+                              text: "🗑️ Xóa tất cả bộ lọc",
+                              onPress: () => {
+                                  setLocation("");
+                                  setJobCategory("");
+                                  setExperienceLevel("");
+                                  // Fetch all jobs when filters are cleared
+                                  setTimeout(() => {
+                                      fetchSearchJobs(1, true);
+                                  }, 100);
+                              },
+                          },
+                      ]
+                    : []),
+                { text: "Hủy", style: "destructive" },
+            ],
+            { cancelable: true }
+        );
+    };
+
     return (
         <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
             <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
@@ -437,8 +680,8 @@ export default function JobsScreen() {
                     <ThemedText style={styles.headerSubtitle}>
                         {getCurrentLoading()
                             ? "Đang tải..."
-                            : activeTab === "search" && searchQuery
-                            ? `${getCurrentJobs().length} kết quả tìm kiếm`
+                            : activeTab === "search" && (searchQuery || activeFiltersCount > 0)
+                            ? `${getCurrentJobs().length} kết quả tìm kiếm${activeFiltersCount > 0 ? ` với ${activeFiltersCount} bộ lọc` : ""}`
                             : activeTab === "recommended"
                             ? `${getCurrentJobs().length} / ${getCurrentTotalJobs()} gợi ý phù hợp • Trang ${getCurrentPage()}/${getCurrentTotalPages()}`
                             : !isAuthenticated
@@ -447,107 +690,91 @@ export default function JobsScreen() {
                     </ThemedText>
                 </View>
 
-                {/* Integrated Tab and Search System */}
-                <View style={styles.integratedTabContainer}>
-                    {/* Search Tab/Input */}
-                    <Animated.View
+                {/* Simple Tab System */}
+                <View style={styles.tabContainer}>
+                    {/* Search Tab */}
+                    <TouchableOpacity
                         style={[
-                            styles.searchTabContainer,
-                            {
-                                flex: searchInputAnimation,
-                            },
+                            styles.tab,
+                            activeTab === "search" && styles.activeTab,
+                            { backgroundColor: activeTab === "search" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.05)" },
                         ]}
+                        onPress={() => setActiveTab("search")}
+                        activeOpacity={0.8}
                     >
-                        <TouchableOpacity
-                            style={[
-                                styles.searchTab,
-                                activeTab === "search" && styles.activeSearchTab,
-                                {
-                                    backgroundColor: activeTab === "search" ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
-                                },
-                            ]}
-                            onPress={() => setActiveTab("search")}
-                            activeOpacity={0.8}
-                        >
-                            <IconSymbol name="magnifyingglass" size={16} color={activeTab === "search" ? "white" : "rgba(255,255,255,0.6)"} />
-
-                            {activeTab === "search" && (
-                                <View style={styles.searchInputContainer}>
-                                    <TextInput
-                                        style={[styles.searchInput, { color: "white" }]}
-                                        placeholder="Tìm kiếm việc làm, công ty..."
-                                        placeholderTextColor="rgba(255,255,255,0.7)"
-                                        value={searchQuery}
-                                        onChangeText={setSearchQuery}
-                                        onSubmitEditing={performSearch}
-                                        returnKeyType="search"
-                                    />
-                                    {searchQuery.length > 0 && (
-                                        <TouchableOpacity
-                                            onPress={() => {
-                                                setSearchQuery("");
-                                                fetchSearchJobs(1, true);
-                                            }}
-                                        >
-                                            <IconSymbol name="xmark.circle.fill" size={16} color="rgba(255,255,255,0.7)" />
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
-                            )}
-
-                            {activeTab !== "search" && (
-                                <Animated.View style={{ opacity: searchInputAnimation.interpolate({ inputRange: [0.5, 1], outputRange: [1, 0] }) }}>
-                                    <ThemedText style={[styles.collapsedTabText, { color: "rgba(255,255,255,0.6)" }]}>Tìm kiếm</ThemedText>
-                                </Animated.View>
-                            )}
-                        </TouchableOpacity>
-                    </Animated.View>
+                        <IconSymbol name="magnifyingglass" size={16} color={activeTab === "search" ? "white" : "rgba(255,255,255,0.6)"} />
+                        <ThemedText style={[styles.tabText, { color: activeTab === "search" ? "white" : "rgba(255,255,255,0.6)" }]}>Tìm kiếm</ThemedText>
+                    </TouchableOpacity>
 
                     {/* Recommend Tab */}
                     {isAuthenticated && (
-                        <Animated.View
+                        <TouchableOpacity
                             style={[
-                                styles.recommendTabContainer,
-                                {
-                                    flex: recommendButtonAnimation,
-                                },
+                                styles.tab,
+                                activeTab === "recommended" && styles.activeTab,
+                                { backgroundColor: activeTab === "recommended" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.05)" },
                             ]}
+                            onPress={() => setActiveTab("recommended")}
+                            activeOpacity={0.8}
                         >
-                            <TouchableOpacity
-                                style={[
-                                    styles.recommendTab,
-                                    activeTab === "recommended" && styles.activeRecommendTab,
-                                    {
-                                        backgroundColor: activeTab === "recommended" ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
-                                    },
-                                ]}
-                                onPress={() => setActiveTab("recommended")}
-                                activeOpacity={0.8}
-                            >
-                                <IconSymbol name="heart.fill" size={16} color={activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)"} />
-
-                                {activeTab === "recommended" && (
-                                    <Animated.View style={{ opacity: recommendButtonAnimation }}>
-                                        <ThemedText style={[styles.tabText, { color: "white" }]}>Phù hợp</ThemedText>
-                                    </Animated.View>
-                                )}
-
-                                {activeTab !== "recommended" && (
-                                    <Animated.View style={{ opacity: recommendButtonAnimation.interpolate({ inputRange: [0.5, 1], outputRange: [1, 0] }) }}>
-                                        <ThemedText style={[styles.collapsedTabText, { color: "rgba(255,255,255,0.6)" }]}>Phù hợp</ThemedText>
-                                    </Animated.View>
-                                )}
-                            </TouchableOpacity>
-                        </Animated.View>
+                            <IconSymbol name="heart.fill" size={16} color={activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)"} />
+                            <ThemedText style={[styles.tabText, { color: activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)" }]}>Phù hợp</ThemedText>
+                        </TouchableOpacity>
                     )}
                 </View>
+
+                {/* Search Input - Only show when search tab is active */}
+                {activeTab === "search" && (
+                    <View style={styles.searchInputSection}>
+                        <View style={styles.searchInputWrapper}>
+                            <IconSymbol name="magnifyingglass" size={16} color={"#ccc"} />
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="Tìm kiếm việc làm, công ty..."
+                                placeholderTextColor="rgba(255,255,255,0.7)"
+                                value={searchQuery}
+                                onChangeText={setSearchQuery}
+                                onSubmitEditing={performSearch}
+                                returnKeyType="search"
+                                autoFocus={false}
+                                editable={true}
+                            />
+                            {searchQuery.length > 0 && (
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setSearchQuery("");
+                                        // If no other filters are active, fetch all jobs
+                                        if (!location && !jobCategory && !experienceLevel) {
+                                            setTimeout(() => {
+                                                fetchSearchJobs(1, true);
+                                            }, 100);
+                                        }
+                                    }}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                >
+                                    <IconSymbol name="xmark.circle.fill" size={16} color={"#ddd"} />
+                                </TouchableOpacity>
+                            )}
+
+                            {/* Filter Button */}
+                            <TouchableOpacity style={styles.filterButton} onPress={showFiltersMenu} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                                <IconSymbol name="slider.horizontal.3" size={16} color={"#fff"} />
+                                {activeFiltersCount > 0 && (
+                                    <View style={styles.filterBadge}>
+                                        <ThemedText style={styles.filterBadgeText}>{activeFiltersCount}</ThemedText>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
             </LinearGradient>
 
             {/* Jobs List */}
             <ScrollView
                 style={styles.jobsList}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={[styles.jobsContainer, { paddingBottom: insets.bottom + 60 }]}
+                contentContainerStyle={[styles.jobsContainer, { paddingBottom: insets.bottom + 60, paddingTop: 10 }]}
             >
                 {getCurrentLoading() ? (
                     <View style={styles.loadingContainer}>
@@ -668,21 +895,18 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: "rgba(255,255,255,0.8)",
     },
-    integratedTabContainer: {
+    tabContainer: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
         gap: 8,
         paddingHorizontal: 20,
         paddingVertical: 16,
-        marginTop: 8,
+        marginTop: 0,
     },
-    searchTabContainer: {
-        flex: 1,
-    },
-    searchTab: {
-        paddingVertical: 12,
-        paddingHorizontal: 20,
+    tab: {
+        paddingVertical: 5,
+        paddingHorizontal: 10,
         borderRadius: 25,
         flexDirection: "row",
         alignItems: "center",
@@ -693,54 +917,34 @@ const styles = StyleSheet.create({
         borderColor: "rgba(255,255,255,0.1)",
         minWidth: 100,
     },
-    activeSearchTab: {
-        borderColor: "rgba(255,255,255,0.3)",
+    activeTab: {
+        borderColor: "rgba(255,255,255,1)",
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.15,
         shadowRadius: 6,
         elevation: 3,
     },
-    searchInputContainer: {
+    searchInputSection: {
+        paddingHorizontal: 20,
+    },
+    searchInputWrapper: {
         flexDirection: "row",
         alignItems: "center",
-        flex: 1,
-        paddingLeft: 8,
+        backgroundColor: "rgba(255,255,255,0.1)",
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
         gap: 8,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.2)",
     },
     searchInput: {
         flex: 1,
         fontSize: 14,
         fontWeight: "500",
+        color: "white",
         paddingVertical: 0,
-    },
-    recommendTabContainer: {
-        flex: 1,
-    },
-    recommendTab: {
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderRadius: 25,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        flex: 1,
-        justifyContent: "center",
-        borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.1)",
-        minWidth: 100,
-    },
-    activeRecommendTab: {
-        borderColor: "rgba(255,255,255,0.3)",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 6,
-        elevation: 3,
-    },
-    collapsedTabText: {
-        fontSize: 14,
-        fontWeight: "700",
     },
     jobsList: {
         flex: 1,
@@ -997,5 +1201,23 @@ const styles = StyleSheet.create({
     tabText: {
         fontSize: 14,
         fontWeight: "700",
+    },
+    filterButton: {
+        padding: 8,
+        borderRadius: 12,
+    },
+    filterBadge: {
+        alignItems: "center",
+        justifyContent: "center",
+        position: "absolute",
+        top: -4,
+        right: 0,
+        padding: 2,
+        borderRadius: 12,
+    },
+    filterBadgeText: {
+        fontSize: 12,
+        fontWeight: "700",
+        color: "white",
     },
 });

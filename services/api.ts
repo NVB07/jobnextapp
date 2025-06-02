@@ -70,6 +70,7 @@ export interface BlogPost {
         avatar?: string;
     };
     publishedAt: string;
+    createdAt: string;
     readTime: string;
     category: string;
     featured: boolean;
@@ -92,6 +93,23 @@ export interface CVAnalysisResult {
     strengths: string[];
     improvementAreas: string[];
     createdAt?: string;
+}
+
+// Job Detail interfaces
+export interface JobDetailResponse {
+    success: boolean;
+    data?: {
+        jobDescription: string;
+        jobRequirements: string;
+    };
+    error?: string;
+    message?: string;
+}
+
+// Enhanced Job interface with detailed information
+export interface JobWithDetail extends Job {
+    detailedDescription?: string;
+    detailedRequirements?: string;
 }
 
 // User Data interfaces
@@ -233,6 +251,73 @@ class ApiService {
         });
 
         return response.data || [];
+    }
+
+    async searchJobsWithFilters(params: {
+        page?: number;
+        perPage?: number;
+        uid?: string;
+        skill?: string;
+        location?: string;
+        category?: string;
+        jobLevel?: string;
+    }): Promise<{
+        jobs: Job[];
+        totalJobs: number;
+        totalPages: number;
+        currentPage: number;
+    }> {
+        const queryParams = new URLSearchParams();
+        if (params.page) queryParams.append("page", params.page.toString());
+        if (params.perPage) queryParams.append("perPage", params.perPage.toString());
+
+        const queryString = queryParams.toString();
+        const endpoint = `/jobs/search-no-match${queryString ? `?${queryString}` : ""}`;
+
+        const body: any = {};
+        if (params.uid) body.uid = params.uid;
+        if (params.skill) body.skill = params.skill;
+        if (params.location) body.location = params.location;
+        if (params.category) body.category = params.category;
+        if (params.jobLevel) body.jobLevel = params.jobLevel;
+
+        const response = await this.request<ApiResponse<Job[]>>(endpoint, {
+            method: "POST",
+            body: JSON.stringify(body),
+        });
+
+        return {
+            jobs: response.data || [],
+            totalJobs: response.pagination?.totalJobs || 0,
+            totalPages: response.pagination?.totalPages || 1,
+            currentPage: response.pagination?.currentPage || 1,
+        };
+    }
+
+    async getJobDetail(jobUrl: string): Promise<JobDetailResponse> {
+        try {
+            console.log(`🔄 Fetching job detail from external API for URL: ${jobUrl}`);
+
+            const response = await fetch("https://jobnext-rosy.vercel.app/api/jobdetail", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ url: jobUrl }),
+            });
+
+            if (!response.ok) {
+                console.error(`❌ Job Detail API Error: ${response.status} ${response.statusText}`);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log(`✅ Job Detail API Success:`, data?.success ? "OK" : "Data received");
+            return data;
+        } catch (error) {
+            console.error("🚨 Job Detail API request failed:", error);
+            throw error;
+        }
     }
 
     async getTopCompanies(): Promise<{
