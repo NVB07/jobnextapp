@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, ScrollView, TouchableOpacity, View, TextInput, Alert, Dimensions, StatusBar, ActivityIndicator, Image } from "react-native";
+import { StyleSheet, ScrollView, TouchableOpacity, View, TextInput, Alert, Dimensions, StatusBar, ActivityIndicator, Image, Animated } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -43,6 +43,10 @@ export default function JobsScreen() {
     const [recommendedTotalPages, setRecommendedTotalPages] = useState(1);
     const [recommendedHasMorePages, setRecommendedHasMorePages] = useState(false);
 
+    // Animation values for tab transitions
+    const [searchInputAnimation] = useState(new Animated.Value(1));
+    const [recommendButtonAnimation] = useState(new Animated.Value(1));
+
     // Fetch jobs from API
     useEffect(() => {
         fetchSearchJobs(1, true);
@@ -66,6 +70,41 @@ export default function JobsScreen() {
     useEffect(() => {
         if (activeTab === "recommended" && recommendedJobs.length === 0) {
             fetchRecommendedJobs(1, true);
+        }
+    }, [activeTab]);
+
+    // Handle tab animations
+    useEffect(() => {
+        const duration = 300;
+
+        if (activeTab === "search") {
+            // Expand search input, shrink recommend button
+            Animated.parallel([
+                Animated.timing(searchInputAnimation, {
+                    toValue: 1,
+                    duration,
+                    useNativeDriver: false,
+                }),
+                Animated.timing(recommendButtonAnimation, {
+                    toValue: 0.5,
+                    duration,
+                    useNativeDriver: false,
+                }),
+            ]).start();
+        } else {
+            // Shrink search input, expand recommend button
+            Animated.parallel([
+                Animated.timing(searchInputAnimation, {
+                    toValue: 0.5,
+                    duration,
+                    useNativeDriver: false,
+                }),
+                Animated.timing(recommendButtonAnimation, {
+                    toValue: 1,
+                    duration,
+                    useNativeDriver: false,
+                }),
+            ]).start();
         }
     }, [activeTab]);
 
@@ -407,67 +446,102 @@ export default function JobsScreen() {
                             : `${getCurrentJobs().length} / ${getCurrentTotalJobs()} việc làm • Trang ${getCurrentPage()}/${getCurrentTotalPages()}`}
                     </ThemedText>
                 </View>
-                {/* Tab Selector */}
-                <View style={styles.tabContainer}>
-                    <TouchableOpacity
+
+                {/* Integrated Tab and Search System */}
+                <View style={styles.integratedTabContainer}>
+                    {/* Search Tab/Input */}
+                    <Animated.View
                         style={[
-                            styles.tabButton,
-                            activeTab === "search" && styles.activeTab,
+                            styles.searchTabContainer,
                             {
-                                backgroundColor: activeTab === "search" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.05)",
-                                flex: isAuthenticated ? 1 : 0,
-                                minWidth: isAuthenticated ? undefined : 120,
+                                flex: searchInputAnimation,
                             },
                         ]}
-                        onPress={() => setActiveTab("search")}
-                        activeOpacity={0.8}
                     >
-                        <IconSymbol name="magnifyingglass" size={16} color={activeTab === "search" ? "white" : "rgba(255,255,255,0.6)"} />
-                        <ThemedText style={[styles.tabText, { color: activeTab === "search" ? "white" : "rgba(255,255,255,0.6)" }]}>Tìm kiếm</ThemedText>
-                    </TouchableOpacity>
-
-                    {isAuthenticated && (
                         <TouchableOpacity
                             style={[
-                                styles.tabButton,
-                                activeTab === "recommended" && styles.activeTab,
-                                { backgroundColor: activeTab === "recommended" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.05)" },
+                                styles.searchTab,
+                                activeTab === "search" && styles.activeSearchTab,
+                                {
+                                    backgroundColor: activeTab === "search" ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
+                                },
                             ]}
-                            onPress={() => setActiveTab("recommended")}
+                            onPress={() => setActiveTab("search")}
                             activeOpacity={0.8}
                         >
-                            <IconSymbol name="heart.fill" size={16} color={activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)"} />
-                            <ThemedText style={[styles.tabText, { color: activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)" }]}>Phù hợp</ThemedText>
+                            <IconSymbol name="magnifyingglass" size={16} color={activeTab === "search" ? "white" : "rgba(255,255,255,0.6)"} />
+
+                            {activeTab === "search" && (
+                                <View style={styles.searchInputContainer}>
+                                    <TextInput
+                                        style={[styles.searchInput, { color: "white" }]}
+                                        placeholder="Tìm kiếm việc làm, công ty..."
+                                        placeholderTextColor="rgba(255,255,255,0.7)"
+                                        value={searchQuery}
+                                        onChangeText={setSearchQuery}
+                                        onSubmitEditing={performSearch}
+                                        returnKeyType="search"
+                                    />
+                                    {searchQuery.length > 0 && (
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                setSearchQuery("");
+                                                fetchSearchJobs(1, true);
+                                            }}
+                                        >
+                                            <IconSymbol name="xmark.circle.fill" size={16} color="rgba(255,255,255,0.7)" />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            )}
+
+                            {activeTab !== "search" && (
+                                <Animated.View style={{ opacity: searchInputAnimation.interpolate({ inputRange: [0.5, 1], outputRange: [1, 0] }) }}>
+                                    <ThemedText style={[styles.collapsedTabText, { color: "rgba(255,255,255,0.6)" }]}>Tìm kiếm</ThemedText>
+                                </Animated.View>
+                            )}
                         </TouchableOpacity>
+                    </Animated.View>
+
+                    {/* Recommend Tab */}
+                    {isAuthenticated && (
+                        <Animated.View
+                            style={[
+                                styles.recommendTabContainer,
+                                {
+                                    flex: recommendButtonAnimation,
+                                },
+                            ]}
+                        >
+                            <TouchableOpacity
+                                style={[
+                                    styles.recommendTab,
+                                    activeTab === "recommended" && styles.activeRecommendTab,
+                                    {
+                                        backgroundColor: activeTab === "recommended" ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
+                                    },
+                                ]}
+                                onPress={() => setActiveTab("recommended")}
+                                activeOpacity={0.8}
+                            >
+                                <IconSymbol name="heart.fill" size={16} color={activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)"} />
+
+                                {activeTab === "recommended" && (
+                                    <Animated.View style={{ opacity: recommendButtonAnimation }}>
+                                        <ThemedText style={[styles.tabText, { color: "white" }]}>Phù hợp</ThemedText>
+                                    </Animated.View>
+                                )}
+
+                                {activeTab !== "recommended" && (
+                                    <Animated.View style={{ opacity: recommendButtonAnimation.interpolate({ inputRange: [0.5, 1], outputRange: [1, 0] }) }}>
+                                        <ThemedText style={[styles.collapsedTabText, { color: "rgba(255,255,255,0.6)" }]}>Phù hợp</ThemedText>
+                                    </Animated.View>
+                                )}
+                            </TouchableOpacity>
+                        </Animated.View>
                     )}
                 </View>
             </LinearGradient>
-            {activeTab === "search" && (
-                <View style={styles.searchSection}>
-                    <View style={[styles.searchContainer, { backgroundColor: colors.cardBackground }]}>
-                        <IconSymbol name="magnifyingglass" size={20} color={colors.icon} />
-                        <TextInput
-                            style={[styles.searchInput, { color: colors.text }]}
-                            placeholder="Tìm kiếm việc làm, công ty..."
-                            placeholderTextColor={colors.icon}
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            onSubmitEditing={performSearch}
-                            returnKeyType="search"
-                        />
-                        {searchQuery.length > 0 && (
-                            <TouchableOpacity
-                                onPress={() => {
-                                    setSearchQuery("");
-                                    fetchSearchJobs(1, true);
-                                }}
-                            >
-                                <IconSymbol name="xmark.circle.fill" size={20} color={colors.icon} />
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                </View>
-            )}
 
             {/* Jobs List */}
             <ScrollView
@@ -594,27 +668,79 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: "rgba(255,255,255,0.8)",
     },
-    searchSection: {
-        paddingHorizontal: 20,
-        paddingVertical: 24,
-    },
-    searchContainer: {
+    integratedTabContainer: {
         flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
         paddingHorizontal: 20,
         paddingVertical: 16,
-        borderRadius: 16,
-        gap: 12,
+        marginTop: 8,
+    },
+    searchTabContainer: {
+        flex: 1,
+    },
+    searchTab: {
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 25,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        flex: 1,
+        justifyContent: "center",
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.1)",
+        minWidth: 100,
+    },
+    activeSearchTab: {
+        borderColor: "rgba(255,255,255,0.3)",
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-        elevation: 6,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+        elevation: 3,
+    },
+    searchInputContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        flex: 1,
+        paddingLeft: 8,
+        gap: 8,
     },
     searchInput: {
         flex: 1,
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: "500",
+        paddingVertical: 0,
+    },
+    recommendTabContainer: {
+        flex: 1,
+    },
+    recommendTab: {
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 25,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        flex: 1,
+        justifyContent: "center",
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.1)",
+        minWidth: 100,
+    },
+    activeRecommendTab: {
+        borderColor: "rgba(255,255,255,0.3)",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+        elevation: 3,
+    },
+    collapsedTabText: {
+        fontSize: 14,
+        fontWeight: "700",
     },
     jobsList: {
         flex: 1,
@@ -867,36 +993,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: "500",
         textAlign: "center",
-    },
-    tabContainer: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        marginTop: 8,
-    },
-    tabButton: {
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderRadius: 25,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        flex: 1,
-        justifyContent: "center",
-        borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.1)",
-        minWidth: 100,
-    },
-    activeTab: {
-        borderColor: "rgba(255,255,255,0.3)",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 6,
-        elevation: 3,
     },
     tabText: {
         fontSize: 14,
