@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { StyleSheet, ScrollView, View, StatusBar, Alert, TouchableOpacity, Modal, ActivityIndicator, Linking, Dimensions, Text } from "react-native";
+import { WebView } from "react-native-webview";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -136,7 +137,7 @@ export default function CVAnalysisScreen() {
         }
 
         return (
-            <View style={[styles.card, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+            <View style={[styles.card, { backgroundColor: Colors[colorScheme ?? "light"].background, borderColor: Colors[colorScheme ?? "light"].border }]}>
                 <LinearGradient colors={["#059669", "#10B981"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardHeader}>
                     <Text style={styles.cardTitle}>📈 Tổng quan đánh giá</Text>
                     <Ionicons name="analytics" size={20} color="white" style={styles.cardIcon} />
@@ -192,7 +193,7 @@ export default function CVAnalysisScreen() {
         const pdfUrl = userData?.userData?.PDF_CV_URL;
 
         return (
-            <View style={[styles.card, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+            <View style={[styles.card, { backgroundColor: Colors[colorScheme ?? "light"].background, borderColor: Colors[colorScheme ?? "light"].border }]}>
                 <LinearGradient colors={["#2563EB", "#3B82F6"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardHeader}>
                     <Text style={styles.cardTitle}>📄 Thông tin CV</Text>
                     <Ionicons name="document-text" size={20} color="white" style={styles.cardIcon} />
@@ -333,24 +334,14 @@ export default function CVAnalysisScreen() {
                         {userData?.userData?.PDF_CV_URL && (
                             <>
                                 <Text style={[styles.modalNote, { color: Colors[colorScheme ?? "light"].text }]}>
-                                    💡 CV sẽ được mở trong trình duyệt để có trải nghiệm xem tốt nhất
+                                    💡Dữ liệu trên CV có thể khác nếu như bạn đã cập nhật hồ sơ mới trên hệ thống
                                 </Text>
 
-                                <View style={styles.modalBody}>
-                                    <TouchableOpacity
-                                        style={[styles.openCVButton, { backgroundColor: "#059669" }]}
-                                        onPress={() => {
-                                            const pdfUrl = userData?.userData?.PDF_CV_URL;
-                                            if (pdfUrl) {
-                                                Linking.openURL(pdfUrl);
-                                                setShowCVModal(false);
-                                            }
-                                        }}
-                                    >
-                                        <Ionicons name="open" size={20} color="white" />
-                                        <Text style={styles.openCVButtonText}>Mở CV trong trình duyệt</Text>
-                                    </TouchableOpacity>
-                                </View>
+                                {userData?.userData?.PDF_CV_URL ? (
+                                    <WebView source={{ uri: userData?.userData?.PDF_CV_URL }} />
+                                ) : (
+                                    <Text style={[styles.noCV]}>Không có CV</Text>
+                                )}
                             </>
                         )}
                     </View>
@@ -436,6 +427,7 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 4,
         overflow: "hidden",
+        borderWidth: 1,
     },
     cardHeader: {
         padding: 14,
@@ -473,6 +465,14 @@ const styles = StyleSheet.create({
     },
     listContainer: {
         gap: 6,
+    },
+    noCV: {
+        fontSize: 16,
+        marginTop: 50,
+        fontWeight: "bold",
+        textAlign: "center",
+        lineHeight: 20,
+        color: "#ff9933",
     },
     listItem: {
         flexDirection: "row",
@@ -659,6 +659,7 @@ const styles = StyleSheet.create({
         letterSpacing: 0.3,
     },
     modalContainer: {
+        marginTop: -60,
         flex: 1,
         backgroundColor: "rgba(0,0,0,0.5)",
     },

@@ -44,6 +44,10 @@ export interface Job {
     expiredOn?: string;
     createdAt?: string;
     updatedAt?: string;
+    // Bookmark status
+    isSaved?: boolean;
+    // Semantic matching score (0-100%)
+    semanticScore?: number;
     // Legacy fields for backward compatibility
     type?: string;
     requirements?: string[];
@@ -144,7 +148,8 @@ export interface UserData {
     email: string;
     displayName?: string;
     userData?: {
-        recommend?: string | null;
+        review?: string | null; // For job recommendations
+        recommend?: string | null; // For CV analysis recommendations
         PDF_CV_URL?: string | null;
         profile?: UserProfile | null;
     };
@@ -159,7 +164,8 @@ interface UserDataApiResponse {
         _id: string;
         uid: string;
         userData?: {
-            recommend?: string;
+            review?: string; // For job recommendations
+            recommend?: string; // For CV analysis recommendations
             PDF_CV_URL?: string;
             profile?: UserProfile;
         };
@@ -182,7 +188,10 @@ class ApiService {
     }
 
     private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-        const url = `${this.baseURL}${endpoint}`;
+        // Ensure proper URL construction with correct slash handling
+        const cleanBaseURL = this.baseURL.endsWith("/") ? this.baseURL.slice(0, -1) : this.baseURL;
+        const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+        const url = `${cleanBaseURL}${cleanEndpoint}`;
 
         const config: RequestInit = {
             headers: {
@@ -194,15 +203,24 @@ class ApiService {
 
         try {
             console.log(`🌐 API Request: ${url}`);
+            console.log(`📤 Request body:`, options.body ? JSON.parse(options.body as string) : "No body");
+            console.log(`🔧 Full URL comparison:`, {
+                baseURL: this.baseURL,
+                endpoint: endpoint,
+                finalURL: url,
+            });
             const response = await fetch(url, config);
 
             if (!response.ok) {
+                const errorText = await response.text();
                 console.error(`❌ API Error: ${response.status} ${response.statusText}`);
-                throw new Error(`HTTP error! status: ${response.status}`);
+                console.error(`❌ Error Response:`, errorText);
+                throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
             }
 
             const data = await response.json();
             console.log(`✅ API Success: ${endpoint}`, data?.success ? "OK" : "Data received");
+            // console.log(`📊 Full Response:`, data);
             return data;
         } catch (error) {
             console.error("🚨 API request failed:", error);
@@ -467,6 +485,7 @@ class ApiService {
                 displayName: response.userRecord.displayName,
                 userData: response.user.userData
                     ? {
+                          review: response.user.userData.review || null,
                           recommend: response.user.userData.recommend || null,
                           PDF_CV_URL: response.user.userData.PDF_CV_URL || null,
                           profile: response.user.userData.profile || null,
@@ -478,6 +497,7 @@ class ApiService {
 
             console.log("✅ User data transformed:", {
                 uid: userData.uid,
+                hasReview: !!userData.userData?.review,
                 hasRecommend: !!userData.userData?.recommend,
                 hasProfile: !!userData.userData?.profile,
                 hasPDF: !!userData.userData?.PDF_CV_URL,
@@ -493,10 +513,167 @@ class ApiService {
     // Health check
     async ping(): Promise<string> {
         try {
-            const response = await this.request<string>("/ping");
-            return response;
+            const response = await this.request<{ message: string; timestamp: string }>(`ping`);
+            return `${response.message} at ${response.timestamp}`;
         } catch (error) {
             console.error("Ping failed:", error);
+            throw new Error("Could not reach server");
+        }
+    }
+
+    // Hybrid search for personalized job recommendations
+    async hybridSearchJobs(params: {
+        page?: number;
+        perPage?: number;
+        uid?: string;
+        skill?: string;
+        jobLevel?: string;
+        location?: string;
+        groupJobFunctionV3Name?: string;
+        review?: string;
+        method?: string;
+    }): Promise<{
+        jobs: Job[];
+        totalJobs: number;
+        totalPages: number;
+        currentPage: number;
+        searchInfo?: {
+            cached: boolean;
+            method: string;
+            endpoint: string;
+        };
+    }> {
+        try {
+            const { page = 1, perPage = 20, uid, skill, jobLevel, location, groupJobFunctionV3Name, review, method = "transformer" } = params;
+
+            // Build body exactly like Recommend.jsx
+            const body: any = {};
+
+            // Only include fields that are provided (conditional like Recommend.jsx)
+            if (skill) body.skill = skill;
+            if (jobLevel) body.jobLevel = jobLevel;
+            if (location) body.location = location;
+            if (groupJobFunctionV3Name) body.groupJobFunctionV3Name = groupJobFunctionV3Name;
+            if (review) body.review = review;
+            if (uid) body.uid = uid;
+            body.method = method; // Always include method
+
+            // console.log(`🚀 Calling hybrid-search with body:`, body);
+
+            const response = await this.request<ApiResponse<Job[]>>(`jobs/hybrid-search?page=${page}&perPage=${perPage}`, {
+                method: "POST",
+                body: JSON.stringify(body),
+            });
+
+            if (!response.success) {
+                throw new Error("Hybrid endpoint failed");
+            }
+
+            return {
+                jobs: response.data || [],
+                totalJobs: response.pagination?.totalJobs || 0,
+                totalPages: response.pagination?.totalPages || 1,
+                currentPage: response.pagination?.currentPage || 1,
+                searchInfo: {
+                    cached: false,
+                    method: "hybrid",
+                    endpoint: "jobs/hybrid-search",
+                },
+            };
+        } catch (error) {
+            console.error("❌ Hybrid search failed:", error);
+            throw error;
+        }
+    }
+
+    // Fallback search for when hybrid search fails
+    async fallbackSearchJobs(params: {
+        page?: number;
+        perPage?: number;
+        uid?: string;
+        skill?: string;
+        jobLevel?: string;
+        location?: string;
+        groupJobFunctionV3Name?: string;
+        review?: string;
+    }): Promise<{
+        jobs: Job[];
+        totalJobs: number;
+        totalPages: number;
+        currentPage: number;
+        searchInfo?: {
+            cached: boolean;
+            method: string;
+            endpoint: string;
+        };
+    }> {
+        try {
+            const { page = 1, perPage = 20, uid, skill, jobLevel, location, groupJobFunctionV3Name, review } = params;
+
+            // Build body exactly like Recommend.jsx fallback
+            const body: any = {};
+
+            // Only include fields that are provided (conditional like Recommend.jsx)
+            if (skill) body.skill = skill;
+            if (jobLevel) body.jobLevel = jobLevel;
+            if (location) body.location = location;
+            if (groupJobFunctionV3Name) body.groupJobFunctionV3Name = groupJobFunctionV3Name;
+            if (review) body.review = review;
+            if (uid) body.uid = uid;
+
+            console.log(`🔄 Calling fallback search with body:`, body);
+
+            const response = await this.request<ApiResponse<Job[]>>(`jobs/search?page=${page}&perPage=${perPage}`, {
+                method: "POST",
+                body: JSON.stringify(body),
+            });
+
+            if (!response.success) {
+                throw new Error("Lỗi khi tải dữ liệu");
+            }
+            // console.log("🔄 Fallback search response:", response.data);
+            return {
+                jobs: response.data || [],
+                totalJobs: response.pagination?.totalJobs || 0,
+                totalPages: response.pagination?.totalPages || 1,
+                currentPage: response.pagination?.currentPage || 1,
+                searchInfo: {
+                    cached: false,
+                    method: "fallback",
+                    endpoint: "jobs/search",
+                },
+            };
+        } catch (error) {
+            console.error("❌ Fallback search failed:", error);
+            throw error;
+        }
+    }
+
+    // Job bookmark methods
+    async saveJob(userId: string, jobId: string): Promise<{ success: boolean; message?: string }> {
+        try {
+            console.log(`💾 Saving job ${jobId} for user ${userId}`);
+            const response = await this.request<{ success: boolean; message?: string }>("users/save-job", {
+                method: "POST",
+                body: JSON.stringify({ userId, jobId }),
+            });
+            return response;
+        } catch (error) {
+            console.error("Failed to save job:", error);
+            throw error;
+        }
+    }
+
+    async unsaveJob(userId: string, jobId: string): Promise<{ success: boolean; message?: string }> {
+        try {
+            console.log(`🗑️ Unsaving job ${jobId} for user ${userId}`);
+            const response = await this.request<{ success: boolean; message?: string }>("users/unsave-job", {
+                method: "POST",
+                body: JSON.stringify({ userId, jobId }),
+            });
+            return response;
+        } catch (error) {
+            console.error("Failed to unsave job:", error);
             throw error;
         }
     }

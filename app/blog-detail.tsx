@@ -47,6 +47,25 @@ export default function BlogDetailScreen() {
         }
     };
 
+    // Custom image renderer to fix FitImage key prop error
+    const customImageRenderer = (node: any, children: any, parent: any, styles: any) => {
+        const { src, alt } = node.attributes;
+        return (
+            <Image
+                key={node.key}
+                source={{ uri: src }}
+                style={{
+                    width: "100%",
+                    height: 200,
+                    resizeMode: "cover" as const,
+                    borderRadius: 8,
+                    marginVertical: 8,
+                }}
+                alt={alt}
+            />
+        );
+    };
+
     const getMarkdownStyles = () => ({
         body: {
             fontSize: 16,
@@ -201,7 +220,14 @@ export default function BlogDetailScreen() {
 
                 {/* Blog Content */}
                 <View style={styles.contentContainer}>
-                    <Markdown style={getMarkdownStyles()}>{blog.content || "Chưa có nội dung"}</Markdown>
+                    <Markdown
+                        style={getMarkdownStyles()}
+                        rules={{
+                            image: customImageRenderer,
+                        }}
+                    >
+                        {blog.content || "Chưa có nội dung"}
+                    </Markdown>
                 </View>
 
                 {/* Tags */}

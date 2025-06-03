@@ -11,6 +11,8 @@ import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { Job, JobWithDetail, apiService } from "@/services/api";
+import { authService } from "@/services/authService";
+import { useJobs } from "@/contexts/JobsContext";
 
 const { width } = Dimensions.get("window");
 
@@ -19,6 +21,9 @@ export default function JobDetailScreen() {
     const colors = Colors[colorScheme ?? "light"];
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
+
+    // Use JobsContext for updating jobs list
+    const { updateJobBookmarkStatus } = useJobs();
 
     // Parse job data from params - now supports detailed job data
     const initialJob: Job = params.jobData ? JSON.parse(params.jobData as string) : null;
@@ -30,16 +35,36 @@ export default function JobDetailScreen() {
     const [detailsError, setDetailsError] = useState<string | null>(null);
 
     const [imageError, setImageError] = useState(false);
-    const [isBookmarked, setIsBookmarked] = useState(false);
+    const [isBookmarked, setIsBookmarked] = useState(job?.isSaved || false);
+    const [bookmarkLoading, setBookmarkLoading] = useState(false);
+
+    // Current user state
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
     // Animated values for loading effects
     const [spinAnimation] = useState(new Animated.Value(0));
     const [fadeAnimation] = useState(new Animated.Value(0));
     const [shimmerAnimation] = useState(new Animated.Value(0));
 
-    // Start animations
-    const startLoadingAnimations = () => {
-        // Spinning animation for loading indicator
+    // Check authentication and get user ID
+    useEffect(() => {
+        const checkAuth = async () => {
+            try {
+                const user = authService.getCurrentUser();
+                if (user) {
+                    setCurrentUserId(user.uid);
+                    console.log("✅ User authenticated:", user.uid);
+                } else {
+                    console.log("⚠️ User not authenticated");
+                    setCurrentUserId(null);
+                }
+            } catch (error) {
+                console.error("❌ Error checking authentication:", error);
+                setCurrentUserId(null);
+            }
+        };
+
+        // Initialize loading animation for bookmark button
         Animated.loop(
             Animated.timing(spinAnimation, {
                 toValue: 1,
@@ -48,38 +73,8 @@ export default function JobDetailScreen() {
             })
         ).start();
 
-        // Shimmer animation for placeholder content
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(shimmerAnimation, {
-                    toValue: 1,
-                    duration: 1000,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(shimmerAnimation, {
-                    toValue: 0,
-                    duration: 1000,
-                    useNativeDriver: true,
-                }),
-            ])
-        ).start();
-
-        // Start with hidden content
-        fadeAnimation.setValue(0);
-    };
-
-    // Stop animations and fade in content
-    const stopLoadingAnimations = () => {
-        spinAnimation.stopAnimation();
-        shimmerAnimation.stopAnimation();
-
-        // Fade in the new content
-        Animated.timing(fadeAnimation, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-        }).start();
-    };
+        checkAuth();
+    }, []);
 
     // Load detailed job information
     useEffect(() => {
@@ -90,12 +85,6 @@ export default function JobDetailScreen() {
             // - Already have detailed data
             // - Job source is "admin" (already has complete info)
             if (!canLoadDetails || !initialJob?.url || job.detailedDescription || initialJob?.jobSource === "admin") {
-                console.log("ℹ️ Skipping API call:", {
-                    canLoadDetails,
-                    hasUrl: !!initialJob?.url,
-                    hasDetailedDescription: !!job.detailedDescription,
-                    jobSource: initialJob?.jobSource,
-                });
                 return;
             }
 
@@ -103,10 +92,8 @@ export default function JobDetailScreen() {
                 setLoadingDetails(true);
                 setDetailsError(null);
                 startLoadingAnimations();
-                console.log(`🔄 Loading detailed job info for: ${initialJob.url}`);
 
                 const jobDetailResponse = await apiService.getJobDetail(initialJob.url);
-                console.log("📊 Job Detail Response:", jobDetailResponse);
 
                 // Check if API call was successful
                 if (jobDetailResponse.success && jobDetailResponse.data) {
@@ -117,7 +104,7 @@ export default function JobDetailScreen() {
                         detailedDescription: jobDescription,
                         detailedRequirements: jobRequirements,
                     }));
-                    console.log("✅ Job details loaded successfully");
+
                     stopLoadingAnimations();
                 } else {
                     setDetailsError(jobDetailResponse.error || jobDetailResponse.message || "Không thể tải thông tin chi tiết");
@@ -175,7 +162,7 @@ export default function JobDetailScreen() {
     const handleShare = async () => {
         try {
             await Share.share({
-                message: `${job.title} tại ${job.company}\n${job.description || "Xem chi tiết tại ứng dụng JobNext"}`,
+                message: `${job.title} \ntại https://jobnext-rosy.vercel.app/jobs/${job._id} \n${job?.url ? "hoặc \n" + job.url : ""}`,
                 title: job.title,
             });
         } catch (error) {
@@ -183,12 +170,66 @@ export default function JobDetailScreen() {
         }
     };
 
-    const handleBookmark = () => {
-        setIsBookmarked(!isBookmarked);
-        Alert.alert(
-            isBookmarked ? "Đã bỏ lưu" : "Đã lưu",
-            isBookmarked ? "Công việc đã được xóa khỏi danh sách yêu thích" : "Công việc đã được thêm vào danh sách yêu thích"
-        );
+    const handleBookmark = async () => {
+        // Check if user is authenticated
+        if (!currentUserId) {
+            Alert.alert("Chưa đăng nhập", "Bạn cần đăng nhập để lưu công việc", [
+                { text: "Hủy", style: "cancel" },
+                { text: "Đăng nhập", onPress: () => router.push("/login") },
+            ]);
+            return;
+        }
+
+        // Check if job ID exists
+        if (!job._id) {
+            Alert.alert("Lỗi", "Không thể lưu công việc này");
+            return;
+        }
+
+        setBookmarkLoading(true);
+
+        try {
+            if (isBookmarked) {
+                // Unsave job
+                const result = await apiService.unsaveJob(currentUserId, job._id);
+                if (result.success) {
+                    setIsBookmarked(false);
+                    Alert.alert("Thành công", "Đã bỏ lưu công việc");
+                    updateJobBookmarkStatus(job._id, false);
+                } else {
+                    Alert.alert("Lỗi", result.message || "Không thể bỏ lưu công việc");
+                }
+            } else {
+                // Save job
+                const result = await apiService.saveJob(currentUserId, job._id);
+                if (result.success) {
+                    setIsBookmarked(true);
+                    Alert.alert("Thành công", "Đã lưu công việc vào danh sách yêu thích");
+                    updateJobBookmarkStatus(job._id, true);
+                } else {
+                    Alert.alert("Lỗi", result.message || "Không thể lưu công việc");
+                }
+            }
+        } catch (error: any) {
+            console.error("❌ Error bookmarking job:", error);
+
+            // Handle specific error cases
+            if (error.message?.includes("Đã lưu job này rồi")) {
+                // Job is already saved, sync the state
+                setIsBookmarked(true);
+                updateJobBookmarkStatus(job._id, true);
+                Alert.alert("Thông báo", "Công việc đã có trong danh sách yêu thích");
+            } else if (error.message?.includes("Job chưa được lưu")) {
+                // Job is not saved, sync the state
+                setIsBookmarked(false);
+                updateJobBookmarkStatus(job._id, false);
+                Alert.alert("Thông báo", "Công việc chưa có trong danh sách yêu thích");
+            } else {
+                Alert.alert("Lỗi", "Có lỗi xảy ra khi lưu công việc. Vui lòng thử lại.");
+            }
+        } finally {
+            setBookmarkLoading(false);
+        }
     };
 
     const CompanyLogo = () => {
@@ -278,14 +319,6 @@ export default function JobDetailScreen() {
 
     // Get job requirements - use detailed requirements from API or fallback to existing data
     const getJobRequirements = () => {
-        console.log("🔍 Job Requirements Debug:", {
-            hasDetailedRequirements: !!job.detailedRequirements,
-            hasJobRequirement: !!job.jobRequirement,
-            detailedRequirements: job.detailedRequirements?.slice(0, 100),
-            jobRequirement: job.jobRequirement?.slice(0, 100),
-            jobSource: job.jobSource,
-        });
-
         if (job.detailedRequirements) {
             return formatJobContent(job.detailedRequirements);
         }
@@ -293,6 +326,50 @@ export default function JobDetailScreen() {
             return formatJobContent(job.jobRequirement.replace(/<[^>]+>/g, " "));
         }
         return null;
+    };
+
+    // Start animations
+    const startLoadingAnimations = () => {
+        // Spinning animation for loading indicator
+        Animated.loop(
+            Animated.timing(spinAnimation, {
+                toValue: 1,
+                duration: 1000,
+                useNativeDriver: true,
+            })
+        ).start();
+
+        // Shimmer animation for placeholder content
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(shimmerAnimation, {
+                    toValue: 1,
+                    duration: 1000,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(shimmerAnimation, {
+                    toValue: 0,
+                    duration: 1000,
+                    useNativeDriver: true,
+                }),
+            ])
+        ).start();
+
+        // Start with hidden content
+        fadeAnimation.setValue(0);
+    };
+
+    // Stop animations and fade in content
+    const stopLoadingAnimations = () => {
+        spinAnimation.stopAnimation();
+        shimmerAnimation.stopAnimation();
+
+        // Fade in the new content
+        Animated.timing(fadeAnimation, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+        }).start();
     };
 
     return (
@@ -314,9 +391,26 @@ export default function JobDetailScreen() {
                                 <IconSymbol name="square.and.arrow.up" size={16} color="white" />
                             </BlurView>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.headerButton} onPress={handleBookmark}>
+                        <TouchableOpacity style={[styles.headerButton, { opacity: bookmarkLoading ? 0.6 : 1 }]} onPress={handleBookmark} disabled={bookmarkLoading}>
                             <BlurView intensity={20} style={styles.headerButtonBg}>
-                                <IconSymbol name={isBookmarked ? "bookmark.fill" : "bookmark"} size={16} color={isBookmarked ? "#fbbf24" : "white"} />
+                                {bookmarkLoading ? (
+                                    <Animated.View
+                                        style={{
+                                            transform: [
+                                                {
+                                                    rotate: spinAnimation.interpolate({
+                                                        inputRange: [0, 1],
+                                                        outputRange: ["0deg", "360deg"],
+                                                    }),
+                                                },
+                                            ],
+                                        }}
+                                    >
+                                        <IconSymbol name="arrow.clockwise" size={16} color="white" />
+                                    </Animated.View>
+                                ) : (
+                                    <IconSymbol name={isBookmarked ? "bookmark.fill" : "bookmark"} size={16} color={isBookmarked ? "#fbbf24" : "white"} />
+                                )}
                             </BlurView>
                         </TouchableOpacity>
                     </View>
@@ -899,7 +993,7 @@ const styles = StyleSheet.create({
     actionContainer: {
         padding: 16,
         borderTopWidth: 1,
-        borderTopColor: "rgba(0,0,0,0.05)",
+        borderTopColor: "rgba(131, 131, 131, 0.58)",
         flexDirection: "row",
         gap: 12,
     },
@@ -913,6 +1007,8 @@ const styles = StyleSheet.create({
         gap: 8,
         flex: 1,
         shadowColor: "#000",
+        borderWidth: 1,
+        borderColor: "rgba(115, 115, 115, 0.46)",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,

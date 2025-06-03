@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, ScrollView, TouchableOpacity, View, TextInput, Alert, Dimensions, StatusBar, ActivityIndicator, Image } from "react-native";
+import { StyleSheet, ScrollView, TouchableOpacity, View, TextInput, Alert, Dimensions, StatusBar, ActivityIndicator, Image, RefreshControl } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -11,7 +12,8 @@ import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiService, Job, JobWithDetail } from "@/services/api";
+import { useJobs } from "@/contexts/JobsContext";
+import { apiService, Job, JobWithDetail, UserData } from "@/services/api";
 
 // Filter constants
 const vietnameseProvinces = [
@@ -84,7 +86,6 @@ const vietnameseProvinces = [
 ];
 
 const jobCategoriesMap = {
-    "": "Tất cả",
     "Academic/Education": "Học thuật/Giáo dục",
     "Accounting/Auditing": "Kế toán/Kiểm toán",
     "Administration/Office Support": "Hành chính/Hỗ trợ văn phòng",
@@ -118,7 +119,6 @@ const jobCategoriesMap = {
 };
 
 const experienceLevelsMap = {
-    "": "Tất cả",
     "Intern/Student": "Thực tập sinh/Sinh viên",
     "Fresher/Entry level": "Mới tốt nghiệp/Mới vào nghề",
     "Experienced (non-manager)": "Có kinh nghiệm (không phải quản lý)",
@@ -133,6 +133,10 @@ export default function JobsScreen() {
     const colors = Colors[colorScheme ?? "light"];
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
+
+    // Use JobsContext instead of local state
+    const { searchJobs, setSearchJobs, recommendedJobs, setRecommendedJobs } = useJobs();
+
     const [searchQuery, setSearchQuery] = useState("");
 
     // Filter states
@@ -140,10 +144,27 @@ export default function JobsScreen() {
     const [jobCategory, setJobCategory] = useState("");
     const [experienceLevel, setExperienceLevel] = useState("");
 
+    // User data state
+    const [userData, setUserData] = useState<UserData | null>(null);
+    const [userDataLoading, setUserDataLoading] = useState(false);
+
+    // Recommended tab filter states (similar to Recommend.jsx)
+    const [recommendedFilters, setRecommendedFilters] = useState({
+        address: true,
+        rank: true,
+        skills: true,
+    });
+
+    // Search info for recommended jobs (cache status, etc.)
+    const [recommendedSearchInfo, setRecommendedSearchInfo] = useState<{
+        cached: boolean;
+        method: string;
+        endpoint: string;
+    } | null>(null);
+
     // Determine if user is authenticated and can see recommended tab
     const isAuthenticated = !!user;
     const [activeTab, setActiveTab] = useState<"search" | "recommended">(isAuthenticated ? "search" : "search");
-    const [searchJobs, setSearchJobs] = useState<Job[]>([]);
     const [searchLoading, setSearchLoading] = useState(true);
     const [searchLoadingMore, setSearchLoadingMore] = useState(false);
     const [searchError, setSearchError] = useState<string | null>(null);
@@ -152,7 +173,6 @@ export default function JobsScreen() {
     const [searchTotalPages, setSearchTotalPages] = useState(1);
     const [searchHasMorePages, setSearchHasMorePages] = useState(false);
 
-    const [recommendedJobs, setRecommendedJobs] = useState<Job[]>([]);
     const [recommendedLoading, setRecommendedLoading] = useState(false);
     const [recommendedLoadingMore, setRecommendedLoadingMore] = useState(false);
     const [recommendedError, setRecommendedError] = useState<string | null>(null);
@@ -160,6 +180,39 @@ export default function JobsScreen() {
     const [recommendedTotalJobs, setRecommendedTotalJobs] = useState(0);
     const [recommendedTotalPages, setRecommendedTotalPages] = useState(1);
     const [recommendedHasMorePages, setRecommendedHasMorePages] = useState(false);
+
+    // Pull-to-refresh states
+    const [refreshing, setRefreshing] = useState(false);
+
+    // Fetch user data when user logs in
+    useEffect(() => {
+        const fetchUserData = async () => {
+            if (!user?.uid) {
+                setUserData(null);
+                return;
+            }
+
+            setUserDataLoading(true);
+            try {
+                const data = await apiService.getUserData(user.uid);
+                setUserData(data);
+                console.log("✅ User data loaded:", {
+                    hasProfile: !!data?.userData?.profile,
+                    hasAddress: !!data?.userData?.profile?.Address,
+                    hasRank: !!data?.userData?.profile?.Rank,
+                    hasSkills: !!data?.userData?.profile?.Skills,
+                    hasIndustry: !!data?.userData?.profile?.Industry,
+                });
+            } catch (error) {
+                console.error("❌ Error fetching user data:", error);
+                setUserData(null);
+            } finally {
+                setUserDataLoading(false);
+            }
+        };
+
+        fetchUserData();
+    }, [user?.uid]);
 
     // Fetch jobs from API
     useEffect(() => {
@@ -193,11 +246,12 @@ export default function JobsScreen() {
         }
     }, [location, jobCategory, experienceLevel]);
 
+    // Fetch recommended jobs when switching to recommended tab or filters change
     useEffect(() => {
-        if (activeTab === "recommended" && recommendedJobs.length === 0) {
+        if (activeTab === "recommended" && isAuthenticated && userData) {
             fetchRecommendedJobs(1, true);
         }
-    }, [activeTab]);
+    }, [activeTab, userData, recommendedFilters]);
 
     const fetchSearchJobs = async (page: number = 1, reset: boolean = false) => {
         try {
@@ -208,21 +262,12 @@ export default function JobsScreen() {
                 setSearchLoadingMore(true);
             }
             setSearchError(null);
-            console.log(`🔄 Fetching search jobs from API (page ${page})...`);
 
             // Use searchJobsWithFilters API for all search tab requests
             const response = await apiService.searchJobsWithFilters({
                 page: page,
                 perPage: 10,
                 uid: user?.uid,
-            });
-
-            console.log("📊 Search Jobs API Response:", {
-                jobsCount: response.jobs?.length || 0,
-                totalJobs: response.totalJobs,
-                currentPage: response.currentPage,
-                totalPages: response.totalPages,
-                page: page,
             });
 
             if (reset) {
@@ -262,39 +307,123 @@ export default function JobsScreen() {
                 setRecommendedLoadingMore(true);
             }
             setRecommendedError(null);
-            console.log(`🔄 Fetching recommended jobs from API (page ${page})...`);
 
-            // For now, use regular jobs API - in real app this would be a recommendation endpoint
-            const response = await apiService.getJobs({
-                page: page,
-                limit: 10,
-                // Add any recommendation parameters here
-            });
+            // Build request body exactly like Recommend.jsx
+            const body: any = {};
 
-            console.log("📊 Recommended Jobs API Response:", {
-                jobsCount: response.jobs?.length || 0,
-                totalJobs: response.totalJobs,
-                currentPage: response.currentPage,
-                totalPages: response.totalPages,
-                page: page,
-            });
-
-            if (reset) {
-                setRecommendedJobs(response.jobs || []);
-                setRecommendedCurrentPage(1);
-            } else {
-                const newJobs = response.jobs || [];
-                setRecommendedJobs((prevJobs) => {
-                    const existingIds = new Set(prevJobs.map((job) => job._id));
-                    const uniqueNewJobs = newJobs.filter((job) => !existingIds.has(job._id));
-                    return [...prevJobs, ...uniqueNewJobs];
-                });
-                setRecommendedCurrentPage(page);
+            // Add filters based on enabled filters (similar to Recommend.jsx logic)
+            if (recommendedFilters.skills && userData?.userData?.profile?.Skills) {
+                body.skill = userData.userData.profile.Skills;
+            }
+            if (recommendedFilters.rank && userData?.userData?.profile?.Rank) {
+                body.jobLevel = userData.userData.profile.Rank;
+            }
+            if (recommendedFilters.address && userData?.userData?.profile?.Address) {
+                body.location = userData.userData.profile.Address;
             }
 
-            setRecommendedTotalPages(response.totalPages || 1);
-            setRecommendedHasMorePages(page < (response.totalPages || 1));
-            setRecommendedTotalJobs(response.totalJobs || 0);
+            // Always include these fields like Recommend.jsx
+            if (userData?.userData?.profile?.Industry) {
+                body.groupJobFunctionV3Name = userData.userData.profile.Industry;
+            }
+            if (userData?.userData?.review) {
+                body.review = userData.userData.review;
+            }
+            if (user?.uid) {
+                body.uid = user.uid;
+            }
+            body.method = "transformer"; // Add method for better matching
+
+            console.log("🔍 Fetching recommended jobs with body:", body);
+
+            try {
+                // 🚀 PRIMARY: Try hybrid-search endpoint first (like Recommend.jsx)
+                const response = await apiService.hybridSearchJobs({
+                    page: page,
+                    perPage: 10,
+                    uid: body.uid,
+                    skill: body.skill,
+                    jobLevel: body.jobLevel,
+                    location: body.location,
+                    groupJobFunctionV3Name: body.groupJobFunctionV3Name,
+                    review: body.review,
+                    method: body.method,
+                });
+
+                if (reset) {
+                    setRecommendedJobs(response.jobs || []);
+                    setRecommendedCurrentPage(1);
+                } else {
+                    const newJobs = response.jobs || [];
+                    setRecommendedJobs((prevJobs) => {
+                        const existingIds = new Set(prevJobs.map((job) => job._id));
+                        const uniqueNewJobs = newJobs.filter((job) => !existingIds.has(job._id));
+                        return [...prevJobs, ...uniqueNewJobs];
+                    });
+                    setRecommendedCurrentPage(page);
+                }
+
+                setRecommendedTotalPages(response.totalPages || 1);
+                setRecommendedHasMorePages(page < (response.totalPages || 1));
+                setRecommendedTotalJobs(response.totalJobs || 0);
+                setRecommendedSearchInfo(response.searchInfo || null);
+
+                // console.log("📊 Recommended Jobs Response:", {
+                //     jobsCount: response.jobs || 0,
+                //     totalJobs: response.totalJobs,
+                //     searchInfo: response.searchInfo,
+                // });
+            } catch (primaryError) {
+                console.warn("❌ Hybrid endpoint failed, trying fallback...", primaryError);
+
+                try {
+                    // 🗝️ FALLBACK: Use regular search endpoint (like Recommend.jsx)
+                    const fallbackResponse = await apiService.fallbackSearchJobs({
+                        page: page,
+                        perPage: 10,
+                        uid: body.uid,
+                        skill: body.skill,
+                        jobLevel: body.jobLevel,
+                        location: body.location,
+                        groupJobFunctionV3Name: body.groupJobFunctionV3Name,
+                        review: body.review,
+                    });
+
+                    if (reset) {
+                        setRecommendedJobs(fallbackResponse.jobs || []);
+                        setRecommendedCurrentPage(1);
+                    } else {
+                        const newJobs = fallbackResponse.jobs || [];
+                        setRecommendedJobs((prevJobs) => {
+                            const existingIds = new Set(prevJobs.map((job) => job._id));
+                            const uniqueNewJobs = newJobs.filter((job) => !existingIds.has(job._id));
+                            return [...prevJobs, ...uniqueNewJobs];
+                        });
+                        setRecommendedCurrentPage(page);
+                    }
+
+                    setRecommendedTotalPages(fallbackResponse.totalPages || 1);
+                    setRecommendedHasMorePages(page < (fallbackResponse.totalPages || 1));
+                    setRecommendedTotalJobs(fallbackResponse.totalJobs || 0);
+                    setRecommendedSearchInfo({
+                        cached: false,
+                        method: "fallback",
+                        endpoint: "jobs/search",
+                    });
+
+                    // console.log("📊 Fallback Response:", {
+                    //     jobsCount: fallbackResponse.jobs?.length || 0,
+                    //     totalJobs: fallbackResponse.totalJobs,
+                    //     method: "fallback",
+                    // });
+                } catch (fallbackError) {
+                    console.error("❌ Both endpoints failed:", {
+                        primary: primaryError,
+                        fallback: fallbackError,
+                    });
+                    throw new Error("Không thể tải dữ liệu công việc");
+                }
+            }
         } catch (err) {
             console.error("❌ Error fetching recommended jobs:", err);
             setRecommendedError("Không thể tải danh sách việc làm phù hợp. Vui lòng thử lại.");
@@ -366,7 +495,6 @@ export default function JobsScreen() {
             setSearchLoading(true);
             setSearchCurrentPage(1);
             setSearchHasMorePages(false);
-            console.log("🔍 Searching jobs with query:", searchQuery, "Filters:", { location, jobCategory, experienceLevel });
 
             // Create search parameters for searchJobsWithFilters API
             const searchParams: any = {
@@ -382,12 +510,6 @@ export default function JobsScreen() {
 
             // Use searchJobsWithFilters API with filters
             const response = await apiService.searchJobsWithFilters(searchParams);
-
-            console.log("📊 Search Results:", {
-                resultsCount: response.jobs?.length || 0,
-                query: searchQuery,
-                filters: searchParams,
-            });
 
             setSearchJobs(response.jobs || []);
             setSearchTotalJobs(response.totalJobs || 0);
@@ -478,9 +600,54 @@ export default function JobsScreen() {
         );
     };
 
+    // Semantic Score Progress Bar Component
+    const SemanticScoreBar = ({ score, size = "small" }: { score: number; size?: "small" | "medium" }) => {
+        const getScoreColor = (score: number) => {
+            if (score >= 80) return "#10b981"; // Green
+            if (score >= 60) return "#f59e0b"; // Yellow
+            if (score >= 40) return "#f97316"; // Orange
+            return "#ef4444"; // Red
+        };
+
+        const getScoreLabel = (score: number) => {
+            if (score >= 80) return "Rất phù hợp";
+            if (score >= 60) return "Phù hợp";
+            if (score >= 40) return "Tương đối";
+            return "Ít phù hợp";
+        };
+
+        const scoreColor = getScoreColor(score);
+        const barHeight = size === "medium" ? 6 : 4;
+        const textSize = size === "medium" ? 12 : 10;
+
+        return (
+            <View style={styles.semanticScoreContainer}>
+                <View style={styles.scoreHeader}>
+                    <View style={styles.scoreInfo}>
+                        <IconSymbol name="sparkles" size={textSize} color={scoreColor} />
+                        <ThemedText style={[styles.scoreLabel, { color: colors.text, fontSize: textSize }]}>{getScoreLabel(score)}</ThemedText>
+                    </View>
+                    <ThemedText style={[styles.scoreValue, { color: scoreColor, fontSize: textSize }]}>{Math.round(score)}%</ThemedText>
+                </View>
+                <View style={[styles.progressBarBackground, { height: barHeight, backgroundColor: colors.border }]}>
+                    <View
+                        style={[
+                            styles.progressBarFill,
+                            {
+                                width: `${score}%`,
+                                backgroundColor: scoreColor,
+                                height: barHeight,
+                            },
+                        ]}
+                    />
+                </View>
+            </View>
+        );
+    };
+
     const JobCard = ({ job, index }: { job: Job; index: number }) => (
         <View style={[styles.jobCard, { backgroundColor: colors.cardBackground }]}>
-            {/* Header with company info only */}
+            {/* Header with company info */}
             <View style={styles.jobCardHeader}>
                 <View style={styles.companySection}>
                     <CompanyLogo job={job} index={index} />
@@ -497,12 +664,23 @@ export default function JobsScreen() {
                         </View>
                     </View>
                 </View>
+
+                {/* Semantic Score Badge - Show for recommended tab only */}
+                {activeTab === "recommended" && job.semanticScore !== undefined && (
+                    <View style={[styles.scoreBadge, { backgroundColor: colors.success + "15" }]}>
+                        <IconSymbol name="target" size={12} color={colors.success} />
+                        <ThemedText style={[styles.scoreBadgeText, { color: colors.success }]}>{Math.round(job.semanticScore)}%</ThemedText>
+                    </View>
+                )}
             </View>
 
             {/* Job title */}
             <ThemedText style={[styles.jobTitle, { color: colors.text }]} numberOfLines={2}>
                 {job.title || "Chưa có tiêu đề"}
             </ThemedText>
+
+            {/* Semantic Score Progress Bar - Show only for recommended tab */}
+            {activeTab === "recommended" && job.semanticScore !== undefined && <SemanticScoreBar score={job.semanticScore} size="small" />}
 
             {/* Skills tags */}
             <View style={styles.skillsContainer}>
@@ -557,10 +735,10 @@ export default function JobsScreen() {
 
             {/* Bottom action buttons */}
             <View style={styles.jobCardActions}>
-                <TouchableOpacity style={[styles.bookmarkButton, { backgroundColor: colors.border }]} activeOpacity={0.7}>
+                {/* <TouchableOpacity style={[styles.bookmarkButton, { backgroundColor: colors.border }]} activeOpacity={0.7}>
                     <IconSymbol name="bookmark" size={16} color={colors.icon} />
                     <ThemedText style={[styles.bookmarkText, { color: colors.icon }]}>Lưu</ThemedText>
-                </TouchableOpacity>
+                </TouchableOpacity> */}
 
                 <TouchableOpacity style={[styles.detailButton, { backgroundColor: colors.tint }]} onPress={() => handleViewDetail(job)} activeOpacity={0.8}>
                     <ThemedText style={styles.detailText}>Xem chi tiết</ThemedText>
@@ -581,8 +759,72 @@ export default function JobsScreen() {
     const getCurrentLoadMore = () => (activeTab === "search" ? loadMoreSearchJobs : loadMoreRecommendedJobs);
     const getCurrentRetry = () => (activeTab === "search" ? () => fetchSearchJobs(1, true) : () => fetchRecommendedJobs(1, true));
 
+    // Toggle recommended filters
+    const toggleRecommendedFilter = (filterType: "address" | "rank" | "skills") => {
+        setRecommendedFilters((prev) => ({
+            ...prev,
+            [filterType]: !prev[filterType],
+        }));
+        // Reset to page 1 when filters change
+        setRecommendedCurrentPage(1);
+    };
+
     // Count active filters
     const activeFiltersCount = [location, jobCategory, experienceLevel].filter(Boolean).length;
+    const activeRecommendedFiltersCount = Object.values(recommendedFilters).filter(Boolean).length;
+
+    // Pull-to-refresh handler
+    const handleRefresh = async () => {
+        setRefreshing(true);
+
+        // Light haptic feedback when refresh starts
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+        try {
+            // Always refresh user data if authenticated
+            if (user?.uid) {
+                try {
+                    const data = await apiService.getUserData(user.uid);
+                    setUserData(data);
+                    console.log("🔄 User data refreshed");
+                } catch (error) {
+                    console.error("❌ Error refreshing user data:", error);
+                }
+            }
+
+            // Refresh jobs based on active tab
+            if (activeTab === "search") {
+                // Reset search state and reload
+                setSearchCurrentPage(1);
+                setSearchHasMorePages(false);
+
+                if (searchQuery.trim() || location || jobCategory || experienceLevel) {
+                    // If there are search criteria, perform search
+                    await performSearch();
+                } else {
+                    // Otherwise fetch all jobs
+                    await fetchSearchJobs(1, true);
+                }
+                console.log("🔄 Search jobs refreshed");
+            } else if (activeTab === "recommended" && userData) {
+                // Reset recommended state and reload
+                setRecommendedCurrentPage(1);
+                setRecommendedHasMorePages(false);
+                await fetchRecommendedJobs(1, true);
+                console.log("🔄 Recommended jobs refreshed");
+            }
+
+            // Success haptic feedback
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        } catch (error) {
+            console.error("❌ Error during refresh:", error);
+            // Error haptic feedback
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            Alert.alert("Lỗi", "Không thể làm mới dữ liệu. Vui lòng thử lại.");
+        } finally {
+            setRefreshing(false);
+        }
+    };
 
     // Filter handlers
     const showLocationFilter = () => {
@@ -669,6 +911,29 @@ export default function JobsScreen() {
         );
     };
 
+    // Cache Status Indicator Component (similar to Recommend.jsx)
+    const CacheStatusIndicator = () => {
+        if (activeTab !== "recommended" || !recommendedSearchInfo) return null;
+
+        const { cached, method, endpoint } = recommendedSearchInfo;
+
+        if (method === "fallback") {
+            return (
+                <View style={[styles.cacheStatus, { backgroundColor: colors.warning + "15", borderColor: colors.warning + "30" }]}>
+                    <IconSymbol name="arrow.clockwise" size={12} color={colors.warning} />
+                    <ThemedText style={[styles.cacheStatusText, { color: colors.warning }]}>Sử dụng endpoint dự phòng</ThemedText>
+                </View>
+            );
+        }
+
+        return (
+            <View style={[styles.cacheStatus, { backgroundColor: colors.success + "15", borderColor: colors.success + "30" }]}>
+                <IconSymbol name="sparkles" size={12} color={colors.success} />
+                <ThemedText style={[styles.cacheStatusText, { color: colors.success }]}>Kết quả được tối ưu hóa</ThemedText>
+            </View>
+        );
+    };
+
     return (
         <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
             <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
@@ -680,14 +945,24 @@ export default function JobsScreen() {
                     <ThemedText style={styles.headerSubtitle}>
                         {getCurrentLoading()
                             ? "Đang tải..."
+                            : refreshing
+                            ? activeTab === "search"
+                                ? "🔄 Đang làm mới danh sách việc làm..."
+                                : "🔄 Đang cập nhật gợi ý phù hợp..."
                             : activeTab === "search" && (searchQuery || activeFiltersCount > 0)
                             ? `${getCurrentJobs().length} kết quả tìm kiếm${activeFiltersCount > 0 ? ` với ${activeFiltersCount} bộ lọc` : ""}`
                             : activeTab === "recommended"
-                            ? `${getCurrentJobs().length} / ${getCurrentTotalJobs()} gợi ý phù hợp • Trang ${getCurrentPage()}/${getCurrentTotalPages()}`
+                            ? userDataLoading
+                                ? "Đang tải thông tin cá nhân..."
+                                : !userData?.userData?.profile
+                                ? "Cập nhật hồ sơ để nhận gợi ý phù hợp"
+                                : `${getCurrentJobs().length} / ${getCurrentTotalJobs()} gợi ý phù hợp • Trang ${getCurrentPage()}/${getCurrentTotalPages()}`
                             : !isAuthenticated
                             ? `${getCurrentJobs().length} / ${getCurrentTotalJobs()} việc làm • Đăng nhập để xem gợi ý phù hợp`
                             : `${getCurrentJobs().length} / ${getCurrentTotalJobs()} việc làm • Trang ${getCurrentPage()}/${getCurrentTotalPages()}`}
                     </ThemedText>
+                    {/* Cache Status Indicator */}
+                    <CacheStatusIndicator />
                 </View>
 
                 {/* Simple Tab System */}
@@ -703,7 +978,7 @@ export default function JobsScreen() {
                         activeOpacity={0.8}
                     >
                         <IconSymbol name="magnifyingglass" size={16} color={activeTab === "search" ? "white" : "rgba(255,255,255,0.6)"} />
-                        <ThemedText style={[styles.tabText, { color: activeTab === "search" ? "white" : "rgba(255,255,255,0.6)" }]}>Tìm kiếm</ThemedText>
+                        <ThemedText style={[styles.tabText, { color: activeTab === "search" ? "white" : "rgba(255,255,255,0.6)" }]}>Tất cả </ThemedText>
                     </TouchableOpacity>
 
                     {/* Recommend Tab */}
@@ -718,7 +993,9 @@ export default function JobsScreen() {
                             activeOpacity={0.8}
                         >
                             <IconSymbol name="heart.fill" size={16} color={activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)"} />
-                            <ThemedText style={[styles.tabText, { color: activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)" }]}>Phù hợp</ThemedText>
+                            <ThemedText style={[styles.tabText, { color: activeTab === "recommended" ? "white" : "rgba(255,255,255,0.6)" }]}>
+                                Phù hợp{activeRecommendedFiltersCount > 0 && activeTab === "recommended" ? ` (${activeRecommendedFiltersCount})` : ""}
+                            </ThemedText>
                         </TouchableOpacity>
                     )}
                 </View>
@@ -775,12 +1052,101 @@ export default function JobsScreen() {
                 style={styles.jobsList}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={[styles.jobsContainer, { paddingBottom: insets.bottom + 60, paddingTop: 10 }]}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={handleRefresh}
+                        tintColor={colors.tint}
+                        colors={[colors.tint]}
+                        progressBackgroundColor={colors.cardBackground}
+                        title={refreshing ? (activeTab === "search" ? "Đang làm mới..." : "Đang cập nhật gợi ý...") : ""}
+                        titleColor={colors.text}
+                    />
+                }
             >
+                {/* Recommended Filters Panel */}
+                {activeTab === "recommended" && userData?.userData?.profile && (
+                    <View style={[styles.filtersPanel, { backgroundColor: colors.cardBackground }]}>
+                        <View style={styles.filtersPanelHeader}>
+                            <IconSymbol name="slider.horizontal.3" size={14} color={colors.tint} />
+                            <ThemedText style={[styles.filtersPanelTitle, { color: colors.text }]}>Bộ lọc cá nhân hóa</ThemedText>
+                        </View>
+
+                        <View style={styles.filtersContainer}>
+                            {userData.userData.profile.Address && (
+                                <TouchableOpacity
+                                    style={[
+                                        styles.filterCheckbox,
+                                        {
+                                            backgroundColor: recommendedFilters.address ? colors.tint + "15" : colors.background,
+                                            borderColor: recommendedFilters.address ? colors.tint : colors.border,
+                                        },
+                                    ]}
+                                    onPress={() => toggleRecommendedFilter("address")}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={[styles.checkbox, { backgroundColor: recommendedFilters.address ? colors.tint : "transparent" }]}>
+                                        {recommendedFilters.address && <IconSymbol name="checkmark" size={12} color="white" />}
+                                    </View>
+                                    <ThemedText style={[styles.filterCheckboxText, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">
+                                        📍 {userData.userData.profile.Address}
+                                    </ThemedText>
+                                </TouchableOpacity>
+                            )}
+
+                            {userData.userData.profile.Rank && (
+                                <TouchableOpacity
+                                    style={[
+                                        styles.filterCheckbox,
+                                        {
+                                            backgroundColor: recommendedFilters.rank ? colors.tint + "15" : colors.background,
+                                            borderColor: recommendedFilters.rank ? colors.tint : colors.border,
+                                        },
+                                    ]}
+                                    onPress={() => toggleRecommendedFilter("rank")}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={[styles.checkbox, { backgroundColor: recommendedFilters.rank ? colors.tint : "transparent" }]}>
+                                        {recommendedFilters.rank && <IconSymbol name="checkmark" size={12} color="white" />}
+                                    </View>
+                                    <ThemedText style={[styles.filterCheckboxText, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">
+                                        ⭐ {userData.userData.profile.Rank}
+                                    </ThemedText>
+                                </TouchableOpacity>
+                            )}
+
+                            {userData.userData.profile.Skills && (
+                                <TouchableOpacity
+                                    style={[
+                                        styles.filterCheckbox,
+                                        {
+                                            backgroundColor: recommendedFilters.skills ? colors.tint + "15" : colors.background,
+                                            borderColor: recommendedFilters.skills ? colors.tint : colors.border,
+                                        },
+                                    ]}
+                                    onPress={() => toggleRecommendedFilter("skills")}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={[styles.checkbox, { backgroundColor: recommendedFilters.skills ? colors.tint : "transparent" }]}>
+                                        {recommendedFilters.skills && <IconSymbol name="checkmark" size={12} color="white" />}
+                                    </View>
+                                    <ThemedText style={[styles.filterCheckboxText, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">
+                                        🔧{" "}
+                                        {userData.userData.profile.Skills.length > 30
+                                            ? `${userData.userData.profile.Skills.slice(0, 30)}...`
+                                            : userData.userData.profile.Skills}
+                                    </ThemedText>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    </View>
+                )}
+
                 {getCurrentLoading() ? (
                     <View style={styles.loadingContainer}>
                         <ActivityIndicator size="large" color={colors.tint} />
                         <ThemedText style={[styles.loadingText, { color: colors.text }]}>
-                            {activeTab === "search" ? "Đang tải việc làm..." : "Đang tải việc làm phù hợp..."}
+                            {activeTab === "search" ? "Đang tải việc làm..." : userDataLoading ? "Đang tải thông tin cá nhân..." : "Đang tìm kiếm việc làm phù hợp..."}
                         </ThemedText>
                     </View>
                 ) : getCurrentError() ? (
@@ -795,13 +1161,37 @@ export default function JobsScreen() {
                     <View style={styles.emptyState}>
                         <IconSymbol name={activeTab === "search" ? "magnifyingglass" : "heart"} size={48} color={colors.icon} />
                         <ThemedText style={[styles.emptyTitle, { color: colors.text }]}>
-                            {activeTab === "search" ? "Không tìm thấy việc làm" : "Chưa có việc làm phù hợp"}
+                            {activeTab === "search"
+                                ? "Không tìm thấy việc làm"
+                                : activeTab === "recommended" && !userData?.userData?.profile
+                                ? "Chưa có hồ sơ cá nhân"
+                                : activeTab === "recommended" && activeRecommendedFiltersCount === 0
+                                ? "Chọn bộ lọc để nhận gợi ý"
+                                : "Không tìm thấy việc làm phù hợp"}
                         </ThemedText>
                         <ThemedText style={[styles.emptySubtitle, { color: colors.icon }]}>
                             {activeTab === "search"
                                 ? "Thử tìm kiếm với từ khóa khác hoặc thay đổi bộ lọc"
+                                : activeTab === "recommended" && !userData?.userData?.profile
+                                ? "Cập nhật thông tin hồ sơ để nhận được gợi ý việc làm phù hợp"
+                                : activeTab === "recommended" && activeRecommendedFiltersCount === 0
+                                ? "Chọn ít nhất một bộ lọc để hệ thống gợi ý việc làm phù hợp với bạn"
+                                : activeRecommendedFiltersCount > 0
+                                ? "Thử bỏ chọn một số bộ lọc để mở rộng kết quả tìm kiếm"
                                 : "Hệ thống sẽ gợi ý việc làm phù hợp với bạn sau khi có đủ dữ liệu"}
                         </ThemedText>
+
+                        {/* Show action button for empty recommended state */}
+                        {activeTab === "recommended" && !userData?.userData?.profile && (
+                            <TouchableOpacity
+                                style={[styles.actionButton, { backgroundColor: colors.tint }]}
+                                onPress={() => router.push("/(tabs)/profile")}
+                                activeOpacity={0.8}
+                            >
+                                <IconSymbol name="person.crop.circle" size={16} color="white" />
+                                <ThemedText style={styles.actionButtonText}>Cập nhật hồ sơ</ThemedText>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 ) : (
                     <>
@@ -809,7 +1199,7 @@ export default function JobsScreen() {
                             <JobCard key={`${job._id}-${index}`} job={job} index={index} />
                         ))}
 
-                        {/* Load More Button */}
+                        {/* Load More Button for Search Tab */}
                         {getCurrentHasMorePages() && activeTab === "search" && !searchQuery && (
                             <View style={styles.loadMoreContainer}>
                                 <TouchableOpacity
@@ -837,7 +1227,7 @@ export default function JobsScreen() {
                             </View>
                         )}
 
-                        {/* Loading More Indicator */}
+                        {/* Load More Button for Recommended Tab */}
                         {getCurrentHasMorePages() && activeTab === "recommended" && (
                             <View style={styles.loadMoreContainer}>
                                 <TouchableOpacity
@@ -861,6 +1251,12 @@ export default function JobsScreen() {
 
                                 <ThemedText style={[styles.paginationInfo, { color: colors.icon }]}>
                                     Trang {getCurrentPage()} / {getCurrentTotalPages()} • Hiển thị {getCurrentJobs().length} việc làm
+                                    {recommendedSearchInfo && (
+                                        <ThemedText style={[styles.paginationInfo, { color: colors.icon }]}>
+                                            {" • "}
+                                            {recommendedSearchInfo.method === "hybrid" ? "Tối ưu hóa AI" : "Tìm kiếm thông thường"}
+                                        </ThemedText>
+                                    )}
                                 </ThemedText>
                             </View>
                         )}
@@ -934,7 +1330,7 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(255,255,255,0.1)",
         borderRadius: 12,
         paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingVertical: 3,
         gap: 8,
         borderWidth: 1,
         borderColor: "rgba(255,255,255,0.2)",
@@ -1069,7 +1465,7 @@ const styles = StyleSheet.create({
     },
     bookmarkButton: {
         paddingHorizontal: 12,
-        paddingVertical: 10,
+        paddingVertical: 6,
         borderRadius: 8,
         flexDirection: "row",
         alignItems: "center",
@@ -1219,5 +1615,133 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: "700",
         color: "white",
+    },
+    cacheStatus: {
+        padding: 8,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.2)",
+        borderRadius: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+    },
+    cacheStatusText: {
+        fontSize: 12,
+        fontWeight: "500",
+    },
+    filtersPanel: {
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 16,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    filtersPanelHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 12,
+    },
+    filtersPanelTitle: {
+        fontSize: 14,
+        fontWeight: "700",
+    },
+    filtersContainer: {
+        gap: 8,
+    },
+    filterCheckbox: {
+        padding: 12,
+        borderWidth: 1,
+        borderRadius: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    checkbox: {
+        width: 16,
+        height: 16,
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: "rgba(0,0,0,0.1)",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    filterCheckboxText: {
+        flex: 1,
+        fontSize: 12,
+        fontWeight: "500",
+    },
+    actionButton: {
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 12,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        marginTop: 16,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    actionButtonText: {
+        color: "white",
+        fontSize: 14,
+        fontWeight: "700",
+    },
+    semanticScoreContainer: {
+        marginTop: 8,
+        marginBottom: 4,
+        padding: 8,
+        backgroundColor: "rgba(255,255,255,0.05)",
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.1)",
+        borderRadius: 8,
+    },
+    scoreHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 4,
+    },
+    scoreInfo: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+    },
+    scoreLabel: {
+        fontSize: 10,
+        fontWeight: "500",
+    },
+    scoreValue: {
+        fontSize: 11,
+        fontWeight: "700",
+    },
+    progressBarBackground: {
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: "rgba(0,0,0,0.1)",
+        overflow: "hidden",
+    },
+    progressBarFill: {
+        height: "100%",
+        borderRadius: 2,
+    },
+    scoreBadge: {
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        borderRadius: 6,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 3,
+    },
+    scoreBadgeText: {
+        fontSize: 10,
+        fontWeight: "600",
     },
 });
