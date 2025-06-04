@@ -49,6 +49,13 @@ export default function TabLayout() {
                 }}
             />
             <Tabs.Screen
+                name="virtual-interview"
+                options={{
+                    title: "Phỏng vấn ảo",
+                    tabBarIcon: ({ color }) => <IconSymbol size={28} name="video.fill" color={color} />,
+                }}
+            />
+            <Tabs.Screen
                 name="blog"
                 options={{
                     title: "Blog",

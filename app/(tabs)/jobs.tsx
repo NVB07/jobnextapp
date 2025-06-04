@@ -17,7 +17,6 @@ import { apiService, Job, JobWithDetail, UserData } from "@/services/api";
 
 // Filter constants
 const vietnameseProvinces = [
-    "Tất cả",
     "An Giang",
     "Bà Rịa - Vũng Tàu",
     "Bắc Giang",
@@ -81,8 +80,8 @@ const vietnameseProvinces = [
     "Vĩnh Long",
     "Vĩnh Phúc",
     "Yên Bái",
-    "Quốc tế",
-    "Khác",
+    "International",
+    "Other",
 ];
 
 const jobCategoriesMap = {
@@ -367,12 +366,6 @@ export default function JobsScreen() {
                 setRecommendedHasMorePages(page < (response.totalPages || 1));
                 setRecommendedTotalJobs(response.totalJobs || 0);
                 setRecommendedSearchInfo(response.searchInfo || null);
-
-                // console.log("📊 Recommended Jobs Response:", {
-                //     jobsCount: response.jobs || 0,
-                //     totalJobs: response.totalJobs,
-                //     searchInfo: response.searchInfo,
-                // });
             } catch (primaryError) {
                 console.warn("❌ Hybrid endpoint failed, trying fallback...", primaryError);
 
@@ -410,12 +403,6 @@ export default function JobsScreen() {
                         method: "fallback",
                         endpoint: "jobs/search",
                     });
-
-                    // console.log("📊 Fallback Response:", {
-                    //     jobsCount: fallbackResponse.jobs?.length || 0,
-                    //     totalJobs: fallbackResponse.totalJobs,
-                    //     method: "fallback",
-                    // });
                 } catch (fallbackError) {
                     console.error("❌ Both endpoints failed:", {
                         primary: primaryError,
@@ -666,12 +653,12 @@ export default function JobsScreen() {
                 </View>
 
                 {/* Semantic Score Badge - Show for recommended tab only */}
-                {activeTab === "recommended" && job.semanticScore !== undefined && (
+                {/* {activeTab === "recommended" && job.semanticScore !== undefined && (
                     <View style={[styles.scoreBadge, { backgroundColor: colors.success + "15" }]}>
                         <IconSymbol name="target" size={12} color={colors.success} />
                         <ThemedText style={[styles.scoreBadgeText, { color: colors.success }]}>{Math.round(job.semanticScore)}%</ThemedText>
                     </View>
-                )}
+                )} */}
             </View>
 
             {/* Job title */}
@@ -912,27 +899,6 @@ export default function JobsScreen() {
     };
 
     // Cache Status Indicator Component (similar to Recommend.jsx)
-    const CacheStatusIndicator = () => {
-        if (activeTab !== "recommended" || !recommendedSearchInfo) return null;
-
-        const { cached, method, endpoint } = recommendedSearchInfo;
-
-        if (method === "fallback") {
-            return (
-                <View style={[styles.cacheStatus, { backgroundColor: colors.warning + "15", borderColor: colors.warning + "30" }]}>
-                    <IconSymbol name="arrow.clockwise" size={12} color={colors.warning} />
-                    <ThemedText style={[styles.cacheStatusText, { color: colors.warning }]}>Sử dụng endpoint dự phòng</ThemedText>
-                </View>
-            );
-        }
-
-        return (
-            <View style={[styles.cacheStatus, { backgroundColor: colors.success + "15", borderColor: colors.success + "30" }]}>
-                <IconSymbol name="sparkles" size={12} color={colors.success} />
-                <ThemedText style={[styles.cacheStatusText, { color: colors.success }]}>Kết quả được tối ưu hóa</ThemedText>
-            </View>
-        );
-    };
 
     return (
         <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -962,7 +928,7 @@ export default function JobsScreen() {
                             : `${getCurrentJobs().length} / ${getCurrentTotalJobs()} việc làm • Trang ${getCurrentPage()}/${getCurrentTotalPages()}`}
                     </ThemedText>
                     {/* Cache Status Indicator */}
-                    <CacheStatusIndicator />
+                    {/* <CacheStatusIndicator /> */}
                 </View>
 
                 {/* Simple Tab System */}

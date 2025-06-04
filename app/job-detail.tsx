@@ -155,8 +155,18 @@ export default function JobDetailScreen() {
     };
 
     const handleVirtualInterview = () => {
-        // Tạm thời chưa cần sự kiện
-        Alert.alert("Thông báo", "Tính năng phỏng vấn ảo đang được phát triển");
+        // Navigate to virtual interview with job data
+        router.push({
+            pathname: "/(tabs)/virtual-interview",
+            params: {
+                jobId: job._id,
+                jobTitle: job.title || "Chưa có tiêu đề",
+                jobDescription: getJobDescription(),
+                jobRequirements: getJobRequirements() || "",
+                company: job.company || "Chưa có tên công ty",
+                fromJobDetail: "true",
+            },
+        });
     };
 
     const handleShare = async () => {

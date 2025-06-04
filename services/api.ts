@@ -179,6 +179,144 @@ interface UserDataApiResponse {
     };
 }
 
+// Cache interface for job details
+interface JobDetailCacheItem {
+    data: {
+        jobDescription: string;
+        jobRequirements: string;
+    };
+    timestamp: number;
+    url: string;
+}
+
+// Cache configuration
+const CACHE_CONFIG = {
+    maxSize: 50, // Maximum number of cached job details
+    ttl: 60 * 60 * 1000, // 1 hour TTL (time to live)
+    cleanupInterval: 10 * 60 * 1000, // Cleanup every 10 minutes
+};
+
+// Job Details Cache Service
+class JobDetailsCacheService {
+    private cache: Map<string, JobDetailCacheItem> = new Map();
+    private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+
+    constructor() {
+        this.startCleanupTimer();
+    }
+
+    private startCleanupTimer() {
+        if (this.cleanupTimer) {
+            clearInterval(this.cleanupTimer);
+        }
+
+        this.cleanupTimer = setInterval(() => {
+            this.cleanup();
+        }, CACHE_CONFIG.cleanupInterval);
+    }
+
+    private cleanup() {
+        const now = Date.now();
+        const entriesToRemove: string[] = [];
+
+        // Remove expired entries
+        for (const [key, item] of this.cache.entries()) {
+            if (now - item.timestamp > CACHE_CONFIG.ttl) {
+                entriesToRemove.push(key);
+            }
+        }
+
+        entriesToRemove.forEach((key) => this.cache.delete(key));
+
+        // If cache is still too large, remove oldest entries
+        if (this.cache.size > CACHE_CONFIG.maxSize) {
+            const entries = Array.from(this.cache.entries()).sort((a, b) => a[1].timestamp - b[1].timestamp);
+
+            const toRemove = entries.slice(0, entries.length - CACHE_CONFIG.maxSize);
+            toRemove.forEach(([key]) => this.cache.delete(key));
+
+            console.log(`🧹 Job Details Cache cleanup: Removed ${toRemove.length} entries`);
+        }
+
+        console.log(`📊 Job Details Cache stats: ${this.cache.size}/${CACHE_CONFIG.maxSize} entries`);
+    }
+
+    private getCacheKey(url: string): string {
+        // Create a normalized cache key from URL
+        return `job_detail_${url}`;
+    }
+
+    get(url: string): JobDetailCacheItem | null {
+        const key = this.getCacheKey(url);
+        const item = this.cache.get(key);
+
+        if (!item) {
+            return null;
+        }
+
+        // Check if item is expired
+        if (Date.now() - item.timestamp > CACHE_CONFIG.ttl) {
+            this.cache.delete(key);
+            return null;
+        }
+
+        return item;
+    }
+
+    set(url: string, data: { jobDescription: string; jobRequirements: string }): void {
+        const key = this.getCacheKey(url);
+        const item: JobDetailCacheItem = {
+            data,
+            timestamp: Date.now(),
+            url,
+        };
+
+        this.cache.set(key, item);
+        console.log(`💾 Cached job details for: ${url.substring(0, 50)}...`);
+
+        // Trigger cleanup if cache is getting large
+        if (this.cache.size > CACHE_CONFIG.maxSize) {
+            this.cleanup();
+        }
+    }
+
+    has(url: string): boolean {
+        const item = this.get(url);
+        return item !== null;
+    }
+
+    clear(): void {
+        this.cache.clear();
+        console.log("🗑️ Job Details Cache cleared");
+    }
+
+    getStats(): { size: number; maxSize: number; entries: Array<{ url: string; timestamp: number; age: number }> } {
+        const now = Date.now();
+        const entries = Array.from(this.cache.entries()).map(([key, item]) => ({
+            url: item.url,
+            timestamp: item.timestamp,
+            age: Math.round((now - item.timestamp) / 1000), // age in seconds
+        }));
+
+        return {
+            size: this.cache.size,
+            maxSize: CACHE_CONFIG.maxSize,
+            entries,
+        };
+    }
+
+    destroy(): void {
+        if (this.cleanupTimer) {
+            clearInterval(this.cleanupTimer);
+            this.cleanupTimer = null;
+        }
+        this.cache.clear();
+    }
+}
+
+// Create singleton instance
+const jobDetailsCache = new JobDetailsCacheService();
+
 // API Service Class
 class ApiService {
     private baseURL: string;
@@ -314,7 +452,17 @@ class ApiService {
 
     async getJobDetail(jobUrl: string): Promise<JobDetailResponse> {
         try {
-            console.log(`🔄 Fetching job detail from external API for URL: ${jobUrl}`);
+            // Check cache first
+            const cachedItem = jobDetailsCache.get(jobUrl);
+            if (cachedItem) {
+                console.log(`⚡ Cache HIT for job detail: ${jobUrl.substring(0, 50)}...`);
+                return {
+                    success: true,
+                    data: cachedItem.data,
+                };
+            }
+
+            console.log(`❌ Cache MISS - Fetching job detail from external API for URL: ${jobUrl.substring(0, 50)}...`);
 
             const response = await fetch("https://jobnext-rosy.vercel.app/api/jobdetail", {
                 method: "POST",
@@ -330,7 +478,15 @@ class ApiService {
             }
 
             const data = await response.json();
-            console.log(`✅ Job Detail API Success:`, data?.success ? "OK" : "Data received");
+
+            // Cache successful responses
+            if (data.success && data.data) {
+                jobDetailsCache.set(jobUrl, data.data);
+                console.log(`✅ Job Detail API Success and cached: ${jobUrl.substring(0, 50)}...`);
+            } else {
+                console.log(`⚠️ Job Detail API returned unsuccessful response: ${data.message || "Unknown error"}`);
+            }
+
             return data;
         } catch (error) {
             console.error("🚨 Job Detail API request failed:", error);
@@ -679,3 +835,6 @@ class ApiService {
     }
 }
 export const apiService = new ApiService();
+
+// Export cache service for debugging purposes
+export { jobDetailsCache };

@@ -26,19 +26,92 @@ export default function CVAnalysisScreen() {
     const [error, setError] = useState<string | null>(null);
 
     const tachNoiDungMarkdown = (md: string) => {
-        const parts = md.split(/\*\*LƯU Ý:\*\*/);
-        if (parts.length < 2) return { error: "Không tìm thấy phần III. LƯU Ý" };
+        console.log("📝 Parsing Gemini AI response:", md.substring(0, 300) + "...");
 
-        const [beforeLuuY, luuY] = parts;
-        const [danhGia, deXuat] = beforeLuuY.split(/\*\*ĐỀ XUẤT CHỈNH SỬA CHI TIẾT:\*\*/);
+        if (!md || typeof md !== "string") {
+            return { error: "Dữ liệu không hợp lệ hoặc rỗng" };
+        }
 
-        if (!danhGia || !deXuat) return { error: "Không tìm thấy phần I hoặc II" };
+        try {
+            // Parse theo format từ Gemini AI prompt
+            const sections = {
+                danhGiaChung: "",
+                deXuatChinhSua: "",
+                luuY: "",
+            };
 
-        return {
-            danhGiaChung: danhGia.trim(),
-            deXuatChinhSua: deXuat.trim(),
-            luuY: luuY.trim(),
-        };
+            // Tìm section ĐÁNH GIÁ CHUNG
+            const danhGiaMatch = md.match(/\*\*ĐÁNH GIÁ CHUNG:\*\*([\s\S]*?)(?=\*\*ĐỀ XUẤT CHỈNH SỬA CHI TIẾT:\*\*|$)/i);
+            if (danhGiaMatch) {
+                sections.danhGiaChung = danhGiaMatch[1].trim();
+                console.log("✅ Found ĐÁNH GIÁ CHUNG section");
+            }
+
+            // Tìm section ĐỀ XUẤT CHỈNH SỬA CHI TIẾT
+            const deXuatMatch = md.match(/\*\*ĐỀ XUẤT CHỈNH SỬA CHI TIẾT:\*\*([\s\S]*?)(?=\*\*LƯU Ý:\*\*|$)/i);
+            if (deXuatMatch) {
+                sections.deXuatChinhSua = deXuatMatch[1].trim();
+                console.log("✅ Found ĐỀ XUẤT CHỈNH SỬA CHI TIẾT section");
+            }
+
+            // Tìm section LƯU Ý
+            const luuYMatch = md.match(/\*\*LƯU Ý:\*\*([\s\S]*?)$/i);
+            if (luuYMatch) {
+                sections.luuY = luuYMatch[1].trim();
+                console.log("✅ Found LƯU Ý section");
+            }
+
+            // Nếu không tìm thấy format chuẩn, thử các pattern khác
+            if (!sections.danhGiaChung && !sections.deXuatChinhSua && !sections.luuY) {
+                console.log("⚠️ Standard format not found, trying alternative patterns...");
+
+                // Thử pattern không có dấu **
+                const altDanhGiaMatch = md.match(/ĐÁNH GIÁ CHUNG:?([\s\S]*?)(?=ĐỀ XUẤT CHỈNH SỬA CHI TIẾT:|$)/i);
+                const altDeXuatMatch = md.match(/ĐỀ XUẤT CHỈNH SỬA CHI TIẾT:?([\s\S]*?)(?=LƯU Ý:|$)/i);
+                const altLuuYMatch = md.match(/LƯU Ý:?([\s\S]*?)$/i);
+
+                if (altDanhGiaMatch) sections.danhGiaChung = altDanhGiaMatch[1].trim();
+                if (altDeXuatMatch) sections.deXuatChinhSua = altDeXuatMatch[1].trim();
+                if (altLuuYMatch) sections.luuY = altLuuYMatch[1].trim();
+            }
+
+            // Parse chi tiết cho section ĐÁNH GIÁ CHUNG
+            let uuDiem = "";
+            let nhuocDiem = "";
+
+            if (sections.danhGiaChung) {
+                const uuDiemMatch = sections.danhGiaChung.match(/Ưu điểm:?([\s\S]*?)(?=Nhược điểm:|$)/i);
+                const nhuocDiemMatch = sections.danhGiaChung.match(/Nhược điểm:?([\s\S]*?)$/i);
+
+                if (uuDiemMatch) uuDiem = uuDiemMatch[1].trim();
+                if (nhuocDiemMatch) nhuocDiem = nhuocDiemMatch[1].trim();
+            }
+
+            console.log("📊 Parsed sections:", {
+                hasDanhGia: !!sections.danhGiaChung,
+                hasDeXuat: !!sections.deXuatChinhSua,
+                hasLuuY: !!sections.luuY,
+                hasUuDiem: !!uuDiem,
+                hasNhuocDiem: !!nhuocDiem,
+            });
+
+            return {
+                danhGiaChung: sections.danhGiaChung,
+                deXuatChinhSua: sections.deXuatChinhSua,
+                luuY: sections.luuY,
+                uuDiem: uuDiem,
+                nhuocDiem: nhuocDiem,
+            };
+        } catch (error) {
+            console.error("❌ Error parsing content:", error);
+            return {
+                danhGiaChung: md.trim(),
+                deXuatChinhSua: "",
+                luuY: "",
+                uuDiem: "",
+                nhuocDiem: "",
+            };
+        }
     };
 
     const fetchUserData = async () => {
@@ -53,6 +126,14 @@ export default function CVAnalysisScreen() {
 
             if (data) {
                 console.log("✅ User data loaded successfully");
+                console.log("📊 User data structure:", {
+                    hasUserData: !!data.userData,
+                    hasRecommend: !!data.userData?.recommend,
+                    hasProfile: !!data.userData?.profile,
+                    hasPdfUrl: !!data.userData?.PDF_CV_URL,
+                    recommendLength: data.userData?.recommend?.length || 0,
+                    recommendPreview: data.userData?.recommend?.substring(0, 100) || "No recommend data",
+                });
                 setUserData(data);
             } else {
                 console.log("⚠️ No user data found");
@@ -127,59 +208,118 @@ export default function CVAnalysisScreen() {
     }
 
     const renderOverviewCard = () => {
-        if (!userData?.userData?.recommend) return null;
+        console.log("🔍 Rendering overview card...");
+        console.log("📊 userData:", {
+            hasUserData: !!userData,
+            hasUserDataField: !!userData?.userData,
+            hasRecommend: !!userData?.userData?.recommend,
+            recommendData: userData?.userData?.recommend ? "Present" : "Missing",
+        });
 
+        if (!userData?.userData?.recommend) {
+            console.log("❌ No recommend data found, returning null");
+            return null;
+        }
+
+        console.log("🔄 Parsing Gemini AI content...");
         const content = tachNoiDungMarkdown(userData.userData.recommend);
+        console.log("📝 Parsed content:", content);
 
         // Type guard to check if content has the expected structure
         if ("error" in content) {
-            return null;
+            console.log("❌ Error parsing content:", content.error);
+            // Show raw data for debugging
+            return (
+                <View style={[styles.card, { backgroundColor: Colors[colorScheme ?? "light"].background, borderColor: Colors[colorScheme ?? "light"].border }]}>
+                    <LinearGradient colors={["#DC2626", "#EF4444"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardHeader}>
+                        <Text style={styles.cardTitle}>⚠️ Lỗi phân tích dữ liệu</Text>
+                        <Ionicons name="warning" size={20} color="white" style={styles.cardIcon} />
+                    </LinearGradient>
+
+                    <View style={[styles.cardContent, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                        <View style={styles.section}>
+                            <Text style={[styles.sectionTitle, { color: "#DC2626" }]}>🚫 Thông báo lỗi</Text>
+                            <Text style={[styles.generalText, { color: Colors[colorScheme ?? "light"].text }]}>{content.error}</Text>
+                        </View>
+                        <View style={styles.section}>
+                            <Text style={[styles.sectionTitle, { color: "#059669" }]}>📄 Dữ liệu gốc (500 ký tự đầu)</Text>
+                            <View style={styles.recommendationContainer}>
+                                <Text style={[styles.generalText, { color: Colors[colorScheme ?? "light"].text }]}>
+                                    {userData.userData.recommend.substring(0, 500)}...
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+                </View>
+            );
         }
+
+        console.log("✅ Successfully parsed content, rendering beautiful card");
 
         return (
             <View style={[styles.card, { backgroundColor: Colors[colorScheme ?? "light"].background, borderColor: Colors[colorScheme ?? "light"].border }]}>
                 <LinearGradient colors={["#059669", "#10B981"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardHeader}>
-                    <Text style={styles.cardTitle}>📈 Tổng quan đánh giá</Text>
+                    <Text style={styles.cardTitle}>📈 Phân tích CV chi tiết</Text>
                     <Ionicons name="analytics" size={20} color="white" style={styles.cardIcon} />
                 </LinearGradient>
 
                 <View style={[styles.cardContent, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
-                    {content.danhGiaChung && (
+                    {/* Section: Ưu điểm */}
+                    {content.uuDiem && (
                         <View style={styles.section}>
-                            <View style={styles.recommendationContainer}>
-                                <Text style={[styles.generalText, { color: Colors[colorScheme ?? "light"].text }]}>{content.danhGiaChung}</Text>
+                            <View style={styles.strengthsHeader}>
+                                <View style={styles.sectionIconContainer}>
+                                    <Ionicons name="thumbs-up" size={16} color="#059669" />
+                                </View>
+                                <Text style={[styles.sectionTitle, { color: "#059669" }]}>Ưu điểm nổi bật</Text>
+                            </View>
+                            <View style={[styles.contentContainer, { backgroundColor: "#059669" + "08" }]}>
+                                <Text style={[styles.contentText, { color: Colors[colorScheme ?? "light"].text }]}>{content.uuDiem}</Text>
                             </View>
                         </View>
                     )}
 
+                    {/* Section: Nhược điểm */}
+                    {content.nhuocDiem && (
+                        <View style={[styles.section, styles.sectionWithBorder]}>
+                            <View style={styles.weaknessHeader}>
+                                <View style={styles.sectionIconContainer}>
+                                    <Ionicons name="flag" size={16} color="#DC2626" />
+                                </View>
+                                <Text style={[styles.sectionTitle, { color: "#DC2626" }]}>Điểm cần cải thiện</Text>
+                            </View>
+                            <View style={[styles.contentContainer, { backgroundColor: "#DC2626" + "08" }]}>
+                                <Text style={[styles.contentText, { color: Colors[colorScheme ?? "light"].text }]}>{content.nhuocDiem}</Text>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Section: Đề xuất chỉnh sửa chi tiết */}
                     {content.deXuatChinhSua && (
-                        <View style={styles.section}>
-                            <Text style={[styles.sectionTitle, { color: "#059669" }]}>✅ Đề xuất</Text>
-                            <View style={styles.listContainer}>
-                                {content.deXuatChinhSua
-                                    .split("- ")
-                                    .filter((item: string) => item.trim())
-                                    .map((strength: string, index: number) => (
-                                        <View key={index} style={styles.listItem}>
-                                            <Text style={[styles.listText, { color: Colors[colorScheme ?? "light"].text }]}>• {strength.trim()}</Text>
-                                        </View>
-                                    ))}
+                        <View style={[styles.section, styles.sectionWithBorder]}>
+                            <View style={styles.suggestionHeader}>
+                                <View style={styles.sectionIconContainer}>
+                                    <Ionicons name="build" size={16} color="#2563EB" />
+                                </View>
+                                <Text style={[styles.sectionTitle, { color: "#2563EB" }]}>Đề xuất chỉnh sửa chi tiết</Text>
+                            </View>
+                            <View style={[styles.contentContainer, { backgroundColor: "#2563EB" + "08" }]}>
+                                <Text style={[styles.contentText, { color: Colors[colorScheme ?? "light"].text }]}>{content.deXuatChinhSua}</Text>
                             </View>
                         </View>
                     )}
 
+                    {/* Section: Lưu ý */}
                     {content.luuY && (
                         <View style={[styles.section, styles.sectionWithBorder]}>
-                            <Text style={[styles.sectionTitle, { color: "#DC2626" }]}>🎯 Gợi ý cải thiện</Text>
-                            <View style={styles.listContainer}>
-                                {content.luuY
-                                    .split("- ")
-                                    .filter((item: string) => item.trim())
-                                    .map((rec: string, index: number) => (
-                                        <View key={index} style={styles.listItem}>
-                                            <Text style={[styles.listText, { color: Colors[colorScheme ?? "light"].text }]}>• {rec.trim()}</Text>
-                                        </View>
-                                    ))}
+                            <View style={styles.noteHeader}>
+                                <View style={styles.sectionIconContainer}>
+                                    <Ionicons name="bulb" size={16} color="#F59E0B" />
+                                </View>
+                                <Text style={[styles.sectionTitle, { color: "#F59E0B" }]}>Gợi ý tổng quan</Text>
+                            </View>
+                            <View style={[styles.contentContainer, { backgroundColor: "#F59E0B" + "08" }]}>
+                                <Text style={[styles.contentText, { color: Colors[colorScheme ?? "light"].text }]}>{content.luuY}</Text>
                             </View>
                         </View>
                     )}
@@ -283,6 +423,7 @@ export default function CVAnalysisScreen() {
     }
 
     if (!userData?.userData?.recommend && !userData?.userData?.profile) {
+        console.log("❌ No CV data found - showing empty state");
         return (
             <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
                 <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
@@ -295,6 +436,9 @@ export default function CVAnalysisScreen() {
                     <Text style={[styles.noDataSubtitle, { color: Colors[colorScheme ?? "light"].text }]}>
                         Vui lòng tải lên CV để hệ thống có thể phân tích và đưa ra gợi ý cải thiện
                     </Text>
+
+                    {/* Debug info */}
+
                     <TouchableOpacity
                         style={[styles.uploadButton, { backgroundColor: Colors[colorScheme ?? "light"].tint }]}
                         onPress={() => {
@@ -309,6 +453,7 @@ export default function CVAnalysisScreen() {
         );
     }
 
+    console.log("🎯 Rendering main content with data");
     return (
         <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
             <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
@@ -746,5 +891,95 @@ const styles = StyleSheet.create({
         alignItems: "center",
         gap: 20,
         paddingVertical: 60,
+    },
+    strengthsHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+    },
+    sectionIconContainer: {
+        padding: 4,
+        borderRadius: 6,
+        backgroundColor: "rgba(0,0,0,0.02)",
+    },
+    weaknessHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+    },
+    suggestionHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+    },
+    suggestionContainer: {
+        padding: 14,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: "rgba(0,0,0,0.06)",
+        backgroundColor: "rgba(0,0,0,0.01)",
+    },
+    suggestionItem: {
+        padding: 14,
+        borderLeftWidth: 2,
+        borderLeftColor: "#2563EB",
+    },
+    suggestionContent: {
+        padding: 14,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: "rgba(0,0,0,0.06)",
+        backgroundColor: "rgba(0,0,0,0.01)",
+    },
+    suggestionText: {
+        fontSize: 14,
+        lineHeight: 20,
+    },
+    noteHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+    },
+    notesContainer: {
+        padding: 14,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: "rgba(0,0,0,0.06)",
+        backgroundColor: "rgba(0,0,0,0.01)",
+    },
+    noteItem: {
+        padding: 14,
+        borderLeftWidth: 2,
+        borderLeftColor: "#F59E0B",
+    },
+    noteText: {
+        fontSize: 14,
+        lineHeight: 20,
+    },
+    bulletPoint: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        marginRight: 8,
+        marginTop: 8,
+    },
+    noteIcon: {
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        alignItems: "center",
+        justifyContent: "center",
+        marginRight: 8,
+    },
+    contentContainer: {
+        padding: 14,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: "rgba(0,0,0,0.06)",
+        backgroundColor: "rgba(0,0,0,0.01)",
+    },
+    contentText: {
+        fontSize: 14,
+        lineHeight: 20,
     },
 });
