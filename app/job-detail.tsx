@@ -159,12 +159,13 @@ export default function JobDetailScreen() {
         router.push({
             pathname: "/(tabs)/virtual-interview",
             params: {
-                jobId: job._id,
+                jobId: job.jobId,
                 jobTitle: job.title || "Chưa có tiêu đề",
                 jobDescription: getJobDescription(),
                 jobRequirements: getJobRequirements() || "",
                 company: job.company || "Chưa có tên công ty",
                 fromJobDetail: "true",
+                jobSource: job.jobSource,
             },
         });
     };
@@ -747,8 +748,30 @@ export default function JobDetailScreen() {
 
             {/* Dual Action Buttons */}
             <View style={[styles.actionContainer, { backgroundColor: colors.background, paddingBottom: insets.bottom }]}>
-                <TouchableOpacity style={styles.virtualInterviewButton} onPress={handleVirtualInterview} activeOpacity={0.8}>
-                    <IconSymbol name="video.fill" size={16} color={colors.text} />
+                <TouchableOpacity
+                    disabled={loadingDetails}
+                    style={[styles.virtualInterviewButton, loadingDetails && { opacity: 0.5 }]}
+                    onPress={handleVirtualInterview}
+                    activeOpacity={0.8}
+                >
+                    {loadingDetails ? (
+                        <Animated.View
+                            style={{
+                                transform: [
+                                    {
+                                        rotate: spinAnimation.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: ["0deg", "360deg"],
+                                        }),
+                                    },
+                                ],
+                            }}
+                        >
+                            <IconSymbol name="arrow.clockwise" size={14} color={colors.tint} />
+                        </Animated.View>
+                    ) : (
+                        <IconSymbol name="video.fill" size={16} color={colors.text} />
+                    )}
                     <ThemedText style={styles.virtualInterviewText}>Phỏng vấn ảo</ThemedText>
                 </TouchableOpacity>
 

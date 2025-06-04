@@ -37,6 +37,7 @@ export default function RootLayout() {
                         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
                         <Stack.Screen name="login" options={{ headerShown: false }} />
                         <Stack.Screen name="job-detail" options={{ headerShown: false }} />
+                        <Stack.Screen name="virtual-interview" options={{ headerShown: false }} />
                         <Stack.Screen name="cv-analysis" options={{ presentation: "modal" }} />
                         <Stack.Screen name="+not-found" />
                     </Stack>

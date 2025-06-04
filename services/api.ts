@@ -1,3 +1,4 @@
+import { Alert } from "react-native";
 import ENV from "../config/env";
 
 // For development, use your computer's IP address
@@ -838,3 +839,201 @@ export const apiService = new ApiService();
 
 // Export cache service for debugging purposes
 export { jobDetailsCache };
+
+// Interview API functions
+export interface InterviewRequest {
+    jobTitle: string;
+    jobRequirement: string;
+    candidateDescription: string;
+    skills?: string;
+    category?: string;
+    answer?: string;
+}
+
+export interface InterviewResponse {
+    message: string;
+    result: string;
+    interviewId: string;
+}
+
+export interface InterviewMessage {
+    id: number;
+    role: "user" | "model";
+    message: string;
+    pass?: number | null;
+    state: boolean;
+}
+
+class InterviewService {
+    private baseUrl: string;
+
+    constructor() {
+        this.baseUrl = `${ENV.API_URL}`;
+    }
+
+    async createOrContinueInterview(data: InterviewRequest, token: string): Promise<InterviewResponse> {
+        try {
+            const response = await fetch(`${this.baseUrl}/interviews`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(data),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || "Failed to create/continue interview");
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error("Interview API error:", error);
+            throw error;
+        }
+    }
+
+    async deleteInterview(interviewId: string, token: string): Promise<{ success: boolean; message?: string }> {
+        try {
+            const response = await fetch(`${this.baseUrl}/interviews/deleteInterview/${interviewId}`, {
+                method: "DELETE",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || "Failed to delete interview");
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error("Delete interview API error:", error);
+            throw error;
+        }
+    }
+
+    async getInterviewById(interviewId: string, token: string) {
+        try {
+            const response = await fetch(`${this.baseUrl}/interviews?interviewId=${interviewId}`, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || "Failed to get interview");
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error("Get interview API error:", error);
+            throw error;
+        }
+    }
+
+    async checkExistingInterview(
+        jobRequirement: string,
+        token: string
+    ): Promise<{
+        exists: boolean;
+        interview?: any;
+        interviewId?: string;
+    }> {
+        try {
+            console.log(`🔍 Checking existing interview for job requirement: ${jobRequirement.substring(0, 100)}...`);
+
+            const response = await fetch(`${this.baseUrl}/interviews/getInterviewByJobRequirement?jobRequirement=${encodeURIComponent(jobRequirement)}`, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            console.log(`📡 Response status: ${response.status}`);
+
+            if (!response.ok) {
+                console.log(`❌ Response not ok: ${response.status} ${response.statusText}`);
+                return { exists: false };
+            }
+
+            const result = await response.json();
+            console.log(`📊 Backend response:`, result);
+
+            if (result.state && result.result) {
+                console.log(`✅ Found existing interview with ID: ${result.interviewId}`);
+                return {
+                    exists: true,
+                    interview: result.result,
+                    interviewId: result.interviewId,
+                };
+            } else {
+                console.log(`❌ No existing interview found`);
+                return { exists: false };
+            }
+        } catch (error) {
+            console.error("❌ Check existing interview API error:", error);
+            return { exists: false };
+        }
+    }
+
+    parseInterviewResponse(result: string): InterviewMessage {
+        try {
+            const raw = result.replace(/```json|```/g, "").trim();
+            return JSON.parse(raw);
+        } catch (error) {
+            // Fallback parsing for malformed JSON
+            const messageMatch = result.match(/"message"\s*:\s*"([^"]+)"/);
+            const passMatch = result.match(/"pass"\s*:\s*(\d+|null)/);
+            const stateMatch = result.match(/"state"\s*:\s*(true|false)/);
+
+            return {
+                id: Date.now(),
+                message: messageMatch ? messageMatch[1] : "Không thể phân tích phản hồi",
+                role: "model",
+                pass: passMatch ? (passMatch[1] === "null" ? null : parseInt(passMatch[1])) : null,
+                state: stateMatch ? stateMatch[1] === "true" : true,
+            };
+        }
+    }
+
+    parseChatHistoryToMessages(chatHistory: any[]): InterviewMessage[] {
+        const messages: InterviewMessage[] = [];
+
+        // Skip the first message (system prompt) and process pairs
+        const conversationHistory = chatHistory.slice(1);
+
+        for (let i = 0; i < conversationHistory.length; i += 2) {
+            // AI message (even index in conversation)
+            if (conversationHistory[i]) {
+                const aiMessage = this.parseInterviewResponse(conversationHistory[i].parts[0].text);
+                aiMessage.id = messages.length + 1;
+                messages.push(aiMessage);
+            }
+
+            // User message (odd index in conversation)
+            if (conversationHistory[i + 1]) {
+                const userMessage: InterviewMessage = {
+                    id: messages.length + 1,
+                    role: "user",
+                    message: conversationHistory[i + 1].parts[0].text,
+                    state: true,
+                };
+                messages.push(userMessage);
+            }
+        }
+
+        return messages;
+    }
+}
+
+export const interviewService = new InterviewService();
+
+// Create a debug service to get cache stats
+class DebugService {
+    // Implementation of DebugService methods
+}

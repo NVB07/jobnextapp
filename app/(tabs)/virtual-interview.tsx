@@ -30,6 +30,7 @@ export default function VirtualInterviewScreen() {
               description: params.jobDescription as string,
               requirements: params.jobRequirements as string,
               company: params.company as string,
+              jobSource: params.jobSource as string,
           }
         : null;
 
@@ -138,11 +139,31 @@ export default function VirtualInterviewScreen() {
 
         console.log("🎯 Starting interview with data:", interviewData);
 
-        // TODO: Implement interview start logic here
-        setTimeout(() => {
-            setIsStarting(false);
-            Alert.alert("Sắp có", "Tính năng phỏng vấn ảo đang được phát triển và sẽ có sớm!");
-        }, 2000);
+        // Navigate to interview chat page
+        const queryParams = {
+            jobTitle: activeTab === "available" ? jobData?.title : customJobTitle,
+            jobDescription: activeTab === "available" ? jobData?.description : "",
+            jobRequirements: activeTab === "available" ? jobData?.requirements : customJobRequirements,
+            company: activeTab === "available" ? jobData?.company : "",
+            userInfo: useUserReview ? userData?.userData?.review : customUserInfo,
+            userId: user?.uid,
+            interviewType: activeTab,
+            jobId: activeTab === "available" ? jobData?.id : "",
+            jobSource: activeTab === "available" ? jobData?.jobSource : "",
+        };
+
+        router.push({
+            pathname: "/interview-chat",
+            params: queryParams,
+        });
+
+        setIsStarting(false);
+
+        // TODO: Remove this temp code once interview chat is working
+        // setTimeout(() => {
+        //     setIsStarting(false);
+        //     Alert.alert("Sắp có", "Tính năng phỏng vấn ảo đang được phát triển và sẽ có sớm!");
+        // }, 2000);
     };
 
     const formatJobContent = (content: string) => {
