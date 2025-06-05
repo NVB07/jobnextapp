@@ -197,6 +197,13 @@ const CACHE_CONFIG = {
     cleanupInterval: 10 * 60 * 1000, // Cleanup every 10 minutes
 };
 
+// Cache configuration for lists
+const LIST_CACHE_CONFIG = {
+    maxSize: 20, // Maximum number of cached list pages
+    ttl: 5 * 60 * 1000, // 5 minutes TTL for lists
+    cleanupInterval: 2 * 60 * 1000, // Cleanup every 2 minutes
+};
+
 // Job Details Cache Service
 class JobDetailsCacheService {
     private cache: Map<string, JobDetailCacheItem> = new Map();
@@ -317,6 +324,186 @@ class JobDetailsCacheService {
 
 // Create singleton instance
 const jobDetailsCache = new JobDetailsCacheService();
+
+// Lists Cache Service for Saved Jobs and Interviews
+interface ListCacheItem {
+    data: {
+        data: any[];
+        pagination: {
+            currentPage: number;
+            perPage: number;
+            totalPages: number;
+            totalJobs: number;
+        };
+    };
+    timestamp: number;
+    key: string;
+}
+
+class ListsCacheService {
+    private cache: Map<string, ListCacheItem> = new Map();
+    private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+
+    constructor() {
+        this.startCleanupTimer();
+    }
+
+    private startCleanupTimer() {
+        if (this.cleanupTimer) {
+            clearInterval(this.cleanupTimer);
+        }
+
+        this.cleanupTimer = setInterval(() => {
+            this.cleanup();
+        }, LIST_CACHE_CONFIG.cleanupInterval);
+    }
+
+    private cleanup() {
+        const now = Date.now();
+        const entriesToRemove: string[] = [];
+
+        // Remove expired entries
+        for (const [key, item] of this.cache.entries()) {
+            if (now - item.timestamp > LIST_CACHE_CONFIG.ttl) {
+                entriesToRemove.push(key);
+            }
+        }
+
+        entriesToRemove.forEach((key) => this.cache.delete(key));
+
+        // If cache is still too large, remove oldest entries
+        if (this.cache.size > LIST_CACHE_CONFIG.maxSize) {
+            const entries = Array.from(this.cache.entries()).sort((a, b) => a[1].timestamp - b[1].timestamp);
+
+            const toRemove = entries.slice(0, entries.length - LIST_CACHE_CONFIG.maxSize);
+            toRemove.forEach(([key]) => this.cache.delete(key));
+
+            console.log(`🧹 Lists Cache cleanup: Removed ${toRemove.length} entries`);
+        }
+
+        console.log(`📊 Lists Cache stats: ${this.cache.size}/${LIST_CACHE_CONFIG.maxSize} entries`);
+    }
+
+    private getCacheKey(type: "savedJobs" | "interviews", uid: string, page: number, perPage: number): string {
+        return `${type}_${uid}_page${page}_per${perPage}`;
+    }
+
+    get(type: "savedJobs" | "interviews", uid: string, page: number, perPage: number): ListCacheItem | null {
+        const key = this.getCacheKey(type, uid, page, perPage);
+        const item = this.cache.get(key);
+
+        if (!item) {
+            return null;
+        }
+
+        // Check if item is expired
+        if (Date.now() - item.timestamp > LIST_CACHE_CONFIG.ttl) {
+            this.cache.delete(key);
+            return null;
+        }
+
+        return item;
+    }
+
+    set(type: "savedJobs" | "interviews", uid: string, page: number, perPage: number, data: any): void {
+        const key = this.getCacheKey(type, uid, page, perPage);
+        const item: ListCacheItem = {
+            data,
+            timestamp: Date.now(),
+            key,
+        };
+
+        this.cache.set(key, item);
+        console.log(`💾 Cached ${type} list for: ${uid} page ${page}`);
+
+        // Trigger cleanup if cache is getting large
+        if (this.cache.size > LIST_CACHE_CONFIG.maxSize) {
+            this.cleanup();
+        }
+    }
+
+    has(type: "savedJobs" | "interviews", uid: string, page: number, perPage: number): boolean {
+        const item = this.get(type, uid, page, perPage);
+        return item !== null;
+    }
+
+    clearUserCache(uid: string): void {
+        const keysToRemove: string[] = [];
+
+        for (const [key, item] of this.cache.entries()) {
+            if (key.includes(uid)) {
+                keysToRemove.push(key);
+            }
+        }
+
+        keysToRemove.forEach((key) => this.cache.delete(key));
+        console.log(`🗑️ Cleared cache for user: ${uid} (${keysToRemove.length} entries)`);
+    }
+
+    clearTypeCache(type: "savedJobs" | "interviews"): void {
+        const keysToRemove: string[] = [];
+
+        for (const [key, item] of this.cache.entries()) {
+            if (key.startsWith(type)) {
+                keysToRemove.push(key);
+            }
+        }
+
+        keysToRemove.forEach((key) => this.cache.delete(key));
+        console.log(`🗑️ Cleared ${type} cache (${keysToRemove.length} entries)`);
+    }
+
+    // Clear cache when user actions that might affect the lists
+    invalidateUserListsCache(uid: string, type?: "savedJobs" | "interviews"): void {
+        if (type) {
+            // Clear specific type for user
+            const keysToRemove: string[] = [];
+
+            for (const [key, item] of this.cache.entries()) {
+                if (key.startsWith(type) && key.includes(uid)) {
+                    keysToRemove.push(key);
+                }
+            }
+
+            keysToRemove.forEach((key) => this.cache.delete(key));
+            console.log(`🗑️ Invalidated ${type} cache for user: ${uid} (${keysToRemove.length} entries)`);
+        } else {
+            // Clear all cache for user
+            this.clearUserCache(uid);
+        }
+    }
+
+    clear(): void {
+        this.cache.clear();
+        console.log("🗑️ Lists Cache cleared");
+    }
+
+    getStats(): { size: number; maxSize: number; entries: Array<{ key: string; timestamp: number; age: number }> } {
+        const now = Date.now();
+        const entries = Array.from(this.cache.entries()).map(([key, item]) => ({
+            key: item.key,
+            timestamp: item.timestamp,
+            age: Math.round((now - item.timestamp) / 1000), // age in seconds
+        }));
+
+        return {
+            size: this.cache.size,
+            maxSize: LIST_CACHE_CONFIG.maxSize,
+            entries,
+        };
+    }
+
+    destroy(): void {
+        if (this.cleanupTimer) {
+            clearInterval(this.cleanupTimer);
+            this.cleanupTimer = null;
+        }
+        this.cache.clear();
+    }
+}
+
+// Create singleton instance
+const listsCache = new ListsCacheService();
 
 // API Service Class
 class ApiService {
@@ -814,6 +1001,12 @@ class ApiService {
                 method: "POST",
                 body: JSON.stringify({ userId, jobId }),
             });
+
+            // Invalidate saved jobs cache after saving
+            if (response.success) {
+                listsCache.invalidateUserListsCache(userId, "savedJobs");
+            }
+
             return response;
         } catch (error) {
             console.error("Failed to save job:", error);
@@ -828,17 +1021,219 @@ class ApiService {
                 method: "POST",
                 body: JSON.stringify({ userId, jobId }),
             });
+
+            // Invalidate saved jobs cache after unsaving
+            if (response.success) {
+                listsCache.invalidateUserListsCache(userId, "savedJobs");
+            }
+
             return response;
         } catch (error) {
             console.error("Failed to unsave job:", error);
             throw error;
         }
     }
+
+    async getSavedJobsCount(uid: string): Promise<{ count: number }> {
+        try {
+            const response = await this.request<ApiResponse<any[]>>(`users/saved-jobs/${uid}?page=1&perPage=1`);
+
+            return {
+                count: response.pagination?.totalJobs || 0,
+            };
+        } catch (error) {
+            console.error("Error getting saved jobs count:", error);
+            return { count: 0 };
+        }
+    }
+
+    async getSavedJobs(
+        uid: string,
+        page: number = 1,
+        perPage: number = 10,
+        forceRefresh: boolean = false
+    ): Promise<{
+        data: Job[];
+        pagination: {
+            currentPage: number;
+            perPage: number;
+            totalPages: number;
+            totalJobs: number;
+        };
+    }> {
+        try {
+            // Check cache first unless force refresh
+            if (!forceRefresh) {
+                const cachedItem = listsCache.get("savedJobs", uid, page, perPage);
+                if (cachedItem) {
+                    console.log(`⚡ Cache HIT for saved jobs: ${uid} page ${page}`);
+                    return cachedItem.data;
+                }
+            }
+
+            console.log(`❌ Cache MISS - Fetching saved jobs from API for user: ${uid} page ${page}`);
+
+            const response = await this.request<ApiResponse<Job[]>>(`users/saved-jobs/${uid}?page=${page}&perPage=${perPage}`);
+
+            const result = {
+                data: response.data || [],
+                pagination: {
+                    currentPage: response.pagination?.currentPage || 1,
+                    perPage: response.pagination?.perPage || perPage,
+                    totalPages: response.pagination?.totalPages || 1,
+                    totalJobs: response.pagination?.totalJobs || 0,
+                },
+            };
+
+            // Cache successful responses
+            if (response.success !== false) {
+                listsCache.set("savedJobs", uid, page, perPage, result);
+                console.log(`✅ Saved jobs API Success and cached: ${uid} page ${page}`);
+            }
+
+            return result;
+        } catch (error) {
+            console.error("Error getting saved jobs:", error);
+            return {
+                data: [],
+                pagination: {
+                    currentPage: 1,
+                    perPage: perPage,
+                    totalPages: 1,
+                    totalJobs: 0,
+                },
+            };
+        }
+    }
+
+    async getInterviewsCount(uid: string, token: string): Promise<{ count: number }> {
+        try {
+            const cleanBaseURL = this.baseURL.endsWith("/") ? this.baseURL.slice(0, -1) : this.baseURL;
+            const url = `${cleanBaseURL}/interviews/getInterviewByUid?uid=${uid}&page=1&perPage=1`;
+
+            const response = await fetch(url, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                console.error(`❌ Interviews API Error: ${response.status} ${response.statusText}`);
+                return { count: 0 };
+            }
+
+            const data = await response.json();
+
+            return {
+                count: data.pagination?.totalInterviews || 0,
+            };
+        } catch (error) {
+            console.error("Error getting interviews count:", error);
+            return { count: 0 };
+        }
+    }
+
+    async getInterviews(
+        uid: string,
+        token: string,
+        page: number = 1,
+        perPage: number = 10,
+        forceRefresh: boolean = false
+    ): Promise<{
+        data: any[];
+        pagination: {
+            currentPage: number;
+            perPage: number;
+            totalPages: number;
+            totalJobs: number;
+        };
+    }> {
+        try {
+            // Check cache first unless force refresh
+            if (!forceRefresh) {
+                const cachedItem = listsCache.get("interviews", uid, page, perPage);
+                if (cachedItem) {
+                    console.log(`⚡ Cache HIT for interviews: ${uid} page ${page}`);
+                    return cachedItem.data;
+                }
+            }
+
+            console.log(`❌ Cache MISS - Fetching interviews from API for user: ${uid} page ${page}`);
+
+            const cleanBaseURL = this.baseURL.endsWith("/") ? this.baseURL.slice(0, -1) : this.baseURL;
+            const url = `${cleanBaseURL}/interviews/getInterviewByUid?uid=${uid}&page=${page}&perPage=${perPage}`;
+
+            const response = await fetch(url, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                console.error(`❌ Interviews API Error: ${response.status} ${response.statusText}`);
+                return {
+                    data: [],
+                    pagination: {
+                        currentPage: 1,
+                        perPage: perPage,
+                        totalPages: 1,
+                        totalJobs: 0,
+                    },
+                };
+            }
+
+            const data = await response.json();
+
+            const result = {
+                data: data.data || [],
+                pagination: {
+                    currentPage: data.pagination?.currentPage || 1,
+                    perPage: data.pagination?.perPage || perPage,
+                    totalPages: data.pagination?.totalPages || 1,
+                    totalJobs: data.pagination?.totalInterviews || 0,
+                },
+            };
+
+            // Cache successful responses
+            if (data.success !== false) {
+                listsCache.set("interviews", uid, page, perPage, result);
+                console.log(`✅ Interviews API Success and cached: ${uid} page ${page}`);
+            }
+
+            return result;
+        } catch (error) {
+            console.error("Error getting interviews:", error);
+            return {
+                data: [],
+                pagination: {
+                    currentPage: 1,
+                    perPage: perPage,
+                    totalPages: 1,
+                    totalJobs: 0,
+                },
+            };
+        }
+    }
+
+    // Cache management utilities
+    clearUserListsCache(uid: string): void {
+        listsCache.clearUserCache(uid);
+    }
+
+    invalidateListsCache(uid: string, type?: "savedJobs" | "interviews"): void {
+        listsCache.invalidateUserListsCache(uid, type);
+    }
+
+    getListsCacheStats(): any {
+        return listsCache.getStats();
+    }
 }
 export const apiService = new ApiService();
 
-// Export cache service for debugging purposes
-export { jobDetailsCache };
+// Export cache services for debugging purposes
+export { jobDetailsCache, listsCache };
 
 // Interview API functions
 export interface InterviewRequest {
@@ -908,7 +1303,14 @@ class InterviewService {
                 throw new Error(errorData.message || "Failed to delete interview");
             }
 
-            return await response.json();
+            const result = await response.json();
+
+            // Invalidate interviews cache after successful deletion
+            if (result.success) {
+                listsCache.clearTypeCache("interviews");
+            }
+
+            return result;
         } catch (error) {
             console.error("Delete interview API error:", error);
             throw error;
@@ -917,6 +1319,7 @@ class InterviewService {
 
     async getInterviewById(interviewId: string, token: string) {
         try {
+            console.log(`🔍 Getting interview by ID: ${interviewId}`);
             const response = await fetch(`${this.baseUrl}/interviews?interviewId=${interviewId}`, {
                 method: "GET",
                 headers: {
@@ -924,14 +1327,20 @@ class InterviewService {
                 },
             });
 
+            console.log(`📡 Interview API status: ${response.status} ${response.statusText}`);
+
             if (!response.ok) {
                 const errorData = await response.json();
+                console.error(`❌ API error:`, errorData);
                 throw new Error(errorData.message || "Failed to get interview");
             }
 
-            return await response.json();
+            const result = await response.json();
+            console.log(`✅ API success with result structure:`, Object.keys(result));
+
+            return result;
         } catch (error) {
-            console.error("Get interview API error:", error);
+            console.error("❌ Get interview API error:", error);
             throw error;
         }
     }
@@ -982,49 +1391,97 @@ class InterviewService {
     }
 
     parseInterviewResponse(result: string): InterviewMessage {
-        try {
-            const raw = result.replace(/```json|```/g, "").trim();
-            return JSON.parse(raw);
-        } catch (error) {
-            // Fallback parsing for malformed JSON
-            const messageMatch = result.match(/"message"\s*:\s*"([^"]+)"/);
-            const passMatch = result.match(/"pass"\s*:\s*(\d+|null)/);
-            const stateMatch = result.match(/"state"\s*:\s*(true|false)/);
-
+        if (!result || typeof result !== "string") {
+            console.error("❌ Invalid input to parseInterviewResponse:", result);
             return {
                 id: Date.now(),
-                message: messageMatch ? messageMatch[1] : "Không thể phân tích phản hồi",
+                message: "Không thể phân tích phản hồi do dữ liệu không hợp lệ",
                 role: "model",
-                pass: passMatch ? (passMatch[1] === "null" ? null : parseInt(passMatch[1])) : null,
-                state: stateMatch ? stateMatch[1] === "true" : true,
+                pass: null,
+                state: true,
             };
+        }
+
+        try {
+            const raw = result.replace(/```json|```/g, "").trim();
+            console.log(`🔍 Attempting to parse JSON: ${raw.substring(0, 100)}...`);
+            return JSON.parse(raw);
+        } catch (jsonError) {
+            console.error("❌ JSON parse error:", jsonError);
+
+            try {
+                // Fallback parsing for malformed JSON
+                const messageMatch = result.match(/"message"\s*:\s*"([^"]+)"/);
+                const passMatch = result.match(/"pass"\s*:\s*(\d+|null)/);
+                const stateMatch = result.match(/"state"\s*:\s*(true|false)/);
+
+                console.log(`📝 Regex matches - message: ${!!messageMatch}, pass: ${!!passMatch}, state: ${!!stateMatch}`);
+
+                return {
+                    id: Date.now(),
+                    message: messageMatch ? messageMatch[1] : "Không thể phân tích phản hồi",
+                    role: "model",
+                    pass: passMatch ? (passMatch[1] === "null" ? null : parseInt(passMatch[1])) : null,
+                    state: stateMatch ? stateMatch[1] === "true" : true,
+                };
+            } catch (regexError) {
+                console.error("❌ Regex fallback error:", regexError);
+                return {
+                    id: Date.now(),
+                    message: "Không thể phân tích phản hồi, vui lòng thử lại",
+                    role: "model",
+                    pass: null,
+                    state: true,
+                };
+            }
         }
     }
 
     parseChatHistoryToMessages(chatHistory: any[]): InterviewMessage[] {
         const messages: InterviewMessage[] = [];
 
-        // Skip the first message (system prompt) and process pairs
-        const conversationHistory = chatHistory.slice(1);
+        if (!chatHistory || !Array.isArray(chatHistory) || chatHistory.length === 0) {
+            console.warn("❌ Empty or invalid chat history");
+            return messages;
+        }
 
-        for (let i = 0; i < conversationHistory.length; i += 2) {
-            // AI message (even index in conversation)
-            if (conversationHistory[i]) {
-                const aiMessage = this.parseInterviewResponse(conversationHistory[i].parts[0].text);
-                aiMessage.id = messages.length + 1;
-                messages.push(aiMessage);
+        console.log(`🔍 Parsing chat history with ${chatHistory.length} entries`);
+
+        try {
+            // Skip the first message (system prompt) and process pairs
+            const conversationHistory = chatHistory.length > 1 ? chatHistory.slice(1) : chatHistory;
+
+            for (let i = 0; i < conversationHistory.length; i += 2) {
+                // AI message (even index in conversation)
+                if (conversationHistory[i] && conversationHistory[i].parts && conversationHistory[i].parts[0]?.text) {
+                    try {
+                        const aiMessage = this.parseInterviewResponse(conversationHistory[i].parts[0].text);
+                        aiMessage.id = messages.length + 1;
+                        messages.push(aiMessage);
+                    } catch (error) {
+                        console.error(`❌ Error parsing AI message at index ${i}:`, error);
+                    }
+                }
+
+                // User message (odd index in conversation)
+                if (conversationHistory[i + 1] && conversationHistory[i + 1].parts && conversationHistory[i + 1].parts[0]?.text) {
+                    try {
+                        const userMessage: InterviewMessage = {
+                            id: messages.length + 1,
+                            role: "user",
+                            message: conversationHistory[i + 1].parts[0].text,
+                            state: true,
+                        };
+                        messages.push(userMessage);
+                    } catch (error) {
+                        console.error(`❌ Error parsing user message at index ${i + 1}:`, error);
+                    }
+                }
             }
 
-            // User message (odd index in conversation)
-            if (conversationHistory[i + 1]) {
-                const userMessage: InterviewMessage = {
-                    id: messages.length + 1,
-                    role: "user",
-                    message: conversationHistory[i + 1].parts[0].text,
-                    state: true,
-                };
-                messages.push(userMessage);
-            }
+            console.log(`✅ Successfully parsed ${messages.length} messages from chat history`);
+        } catch (error) {
+            console.error("❌ Error in parseChatHistoryToMessages:", error);
         }
 
         return messages;

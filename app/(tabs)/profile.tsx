@@ -1,7 +1,9 @@
-import React, { useState } from "react";
-import { StyleSheet, ScrollView, TouchableOpacity, View, Alert, Dimensions, StatusBar } from "react-native";
+import React, { useState, useEffect } from "react";
+import { StyleSheet, ScrollView, TouchableOpacity, View, Alert, Dimensions, StatusBar, RefreshControl } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router } from "expo-router";
+import { auth } from "../../config/firebase";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -10,14 +12,13 @@ import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useAuth } from "../../contexts/AuthContext";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
+import { apiService, listsCache } from "../../services/api";
 
 const { width } = Dimensions.get("window");
 
 interface UserStats {
-    applications: number;
     interviews: number;
-    offers: number;
-    profileViews: number;
+    savedJobs: number;
 }
 
 interface Achievement {
@@ -35,6 +36,11 @@ export default function ProfileScreen() {
     const insets = useSafeAreaInsets();
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
     const [darkModeEnabled, setDarkModeEnabled] = useState(colorScheme === "dark");
+    const [userStats, setUserStats] = useState<UserStats>({
+        interviews: 0,
+        savedJobs: 0,
+    });
+    const [refreshing, setRefreshing] = useState(false);
 
     // Authentication guard
     const { user, loading, isAuthenticated } = useAuthGuard();
@@ -45,12 +51,42 @@ export default function ProfileScreen() {
         return <ThemedView style={styles.container} />;
     }
 
-    const userStats: UserStats = {
-        applications: 23,
-        interviews: 8,
-        offers: 3,
-        profileViews: 156,
+    // Fetch user statistics
+    const fetchUserStats = async () => {
+        if (!user?.uid) return;
+
+        try {
+            // Get token for interviews API
+            const currentUser = auth.currentUser;
+            const token = currentUser ? await currentUser.getIdToken() : "";
+
+            // Fetch both counts in parallel
+            const [savedJobsResult, interviewsResult] = await Promise.all([apiService.getSavedJobsCount(user.uid), apiService.getInterviewsCount(user.uid, token)]);
+
+            setUserStats({
+                savedJobs: savedJobsResult.count,
+                interviews: interviewsResult.count,
+            });
+        } catch (error) {
+            console.error("Error fetching user stats:", error);
+            // Keep default values on error
+        }
     };
+
+    // Handle pull to refresh
+    const onRefresh = async () => {
+        setRefreshing(true);
+        // Clear cache to ensure fresh data
+        if (user?.uid) {
+            listsCache.clearUserCache(user.uid);
+        }
+        await fetchUserStats();
+        setRefreshing(false);
+    };
+
+    useEffect(() => {
+        fetchUserStats();
+    }, [user?.uid]);
 
     const profileCompleteness = 75;
 
@@ -102,8 +138,8 @@ export default function ProfileScreen() {
         ]);
     };
 
-    const StatCard = ({ title, value, icon, gradient }: { title: string; value: number; icon: string; gradient: [string, string] }) => (
-        <View style={[styles.statCard, { backgroundColor: colors.cardBackground }]}>
+    const StatCard = ({ title, value, icon, gradient, onPress }: { title: string; value: number; icon: string; gradient: [string, string]; onPress?: () => void }) => (
+        <TouchableOpacity style={[styles.statCard, { backgroundColor: colors.cardBackground }]} onPress={onPress} activeOpacity={onPress ? 0.8 : 1}>
             <LinearGradient colors={gradient} style={styles.statIcon}>
                 <IconSymbol name={icon as any} size={20} color="white" />
             </LinearGradient>
@@ -112,7 +148,13 @@ export default function ProfileScreen() {
                 <ThemedText style={[styles.statValue, { color: colors.text }]}>{value}</ThemedText>
                 <ThemedText style={[styles.statTitle, { color: colors.icon }]}>{title}</ThemedText>
             </View>
-        </View>
+
+            {onPress && (
+                <View style={styles.statArrow}>
+                    <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+                </View>
+            )}
+        </TouchableOpacity>
     );
 
     const AchievementCard = ({ achievement }: { achievement: Achievement }) => (
@@ -187,6 +229,16 @@ export default function ProfileScreen() {
                 style={styles.content}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: insets.bottom + 40 }}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={[colors.tint]} // Android
+                        tintColor={colors.tint} // iOS
+                        title="Đang tải lại..."
+                        titleColor={colors.text}
+                    />
+                }
             >
                 {/* Profile Header */}
 
@@ -211,10 +263,20 @@ export default function ProfileScreen() {
                     <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Thống kê hoạt động</ThemedText>
 
                     <View style={styles.statsGrid}>
-                        <StatCard title="Đơn ứng tuyển" value={userStats.applications} icon="paperplane.fill" gradient={["#6366f1", "#8b5cf6"] as [string, string]} />
-                        <StatCard title="Phỏng vấn" value={userStats.interviews} icon="person.2.fill" gradient={["#10b981", "#34d399"] as [string, string]} />
-                        <StatCard title="Lời mời" value={userStats.offers} icon="heart.fill" gradient={["#f59e0b", "#fbbf24"] as [string, string]} />
-                        <StatCard title="Lượt xem" value={userStats.profileViews} icon="eye.fill" gradient={["#8b5cf6", "#a78bfa"] as [string, string]} />
+                        <StatCard
+                            title="Phỏng vấn"
+                            value={userStats.interviews}
+                            icon="person.2.fill"
+                            gradient={["#10b981", "#34d399"] as [string, string]}
+                            onPress={() => router.push("/interviews")}
+                        />
+                        <StatCard
+                            title="Công việc đã lưu"
+                            value={userStats.savedJobs}
+                            icon="bookmark.fill"
+                            gradient={["#f59e0b", "#fbbf24"] as [string, string]}
+                            onPress={() => router.push("/saved-jobs")}
+                        />
                     </View>
                 </View>
 
@@ -404,6 +466,11 @@ const styles = StyleSheet.create({
     statTitle: {
         fontSize: 12,
         marginTop: 2,
+    },
+    statArrow: {
+        marginLeft: 8,
+        alignItems: "center",
+        justifyContent: "center",
     },
     achievementsSection: {
         paddingHorizontal: 24,

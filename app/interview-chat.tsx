@@ -48,6 +48,10 @@ export default function InterviewChatScreen() {
     const params = useLocalSearchParams();
     const navigation = useNavigation();
 
+    // Check if we're loading an existing interview by ID
+    const existingInterviewId = params.interviewId as string;
+    const isExistingInterview = !!existingInterviewId;
+
     // Hide the default header
     useLayoutEffect(() => {
         navigation.setOptions({
@@ -56,7 +60,7 @@ export default function InterviewChatScreen() {
     }, [navigation]);
 
     // Parse interview data from params
-    const interviewData: InterviewData = {
+    const interviewData: Partial<InterviewData> = {
         jobTitle: params.jobTitle as string,
         jobDescription: params.jobDescription as string,
         jobRequirements: params.jobRequirements as string,
@@ -72,9 +76,10 @@ export default function InterviewChatScreen() {
     const [messages, setMessages] = useState<InterviewMessage[]>([]);
     const [inputValue, setInputValue] = useState("");
     const [isLoading, setIsLoading] = useState(false);
-    const [interviewId, setInterviewId] = useState<string | null>(null);
+    const [interviewId, setInterviewId] = useState<string | null>(existingInterviewId || null);
     const [interviewEnded, setInterviewEnded] = useState(false);
     const [keyboardHeight, setKeyboardHeight] = useState(0);
+    const [interviewDetails, setInterviewDetails] = useState<any>(null);
     const scrollViewRef = useRef<ScrollView>(null);
 
     // Animation values
@@ -83,7 +88,11 @@ export default function InterviewChatScreen() {
     const typingAnimation3 = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        startInterview();
+        if (isExistingInterview) {
+            loadInterviewById();
+        } else {
+            startInterview();
+        }
     }, []);
 
     useEffect(() => {
@@ -154,9 +163,111 @@ export default function InterviewChatScreen() {
         }
     }, [isLoading]);
 
+    const loadInterviewById = async () => {
+        if (!user) {
+            Alert.alert("Lỗi", "Vui lòng đăng nhập để tiếp tục");
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const currentUser = auth.currentUser;
+            if (!currentUser) {
+                Alert.alert("Lỗi", "Phiên đăng nhập đã hết hạn");
+                return;
+            }
+
+            const token = await currentUser.getIdToken();
+
+            // Fetch interview by ID
+            console.log(`🔍 Fetching interview with ID: ${existingInterviewId}`);
+            const response = await interviewService.getInterviewById(existingInterviewId, token);
+
+            console.log(`📡 Interview API response:`, JSON.stringify(response).substring(0, 200) + "...");
+
+            // Check if we got a valid response with the expected structure
+            if (!response || !response.result) {
+                console.error("❌ Invalid response format:", response);
+                throw new Error("Định dạng phản hồi từ API không hợp lệ");
+            }
+
+            const interview = response.result;
+
+            if (!interview || !interview.chatHistory || !Array.isArray(interview.chatHistory)) {
+                console.error("❌ Invalid interview data:", interview);
+                throw new Error("Dữ liệu phỏng vấn không hợp lệ");
+            }
+
+            // Update interview details for use in UI
+            setInterviewDetails(interview);
+
+            // Update interview data based on loaded interview
+            if (interview.jobTitle) {
+                interviewData.jobTitle = interview.jobTitle;
+            }
+
+            if (interview.jobRequirement) {
+                interviewData.jobRequirements = interview.jobRequirement;
+            }
+
+            if (interview.candidateDescription) {
+                interviewData.userInfo = interview.candidateDescription;
+            }
+
+            if (interview.jobId) {
+                interviewData.jobId = interview.jobId;
+            }
+
+            if (interview.jobSource) {
+                interviewData.jobSource = interview.jobSource;
+            }
+
+            if (interview.company) {
+                interviewData.company = interview.company;
+            }
+
+            // Update the title in the header immediately
+            console.log(`📋 Updated interview data from API: jobTitle=${interviewData.jobTitle}, jobId=${interviewData.jobId}, company=${interviewData.company}`);
+
+            // Parse chat history to messages
+            const existingMessages = interviewService.parseChatHistoryToMessages(interview.chatHistory || []);
+
+            if (existingMessages.length === 0) {
+                console.warn("⚠️ No messages found in chat history");
+            } else {
+                console.log(`✅ Parsed ${existingMessages.length} messages from chat history`);
+            }
+
+            setMessages(existingMessages);
+
+            // Check if interview is ended (last message has state: false)
+            const lastMessage = existingMessages[existingMessages.length - 1];
+            setInterviewEnded(lastMessage ? !lastMessage.state : false);
+
+            console.log(`✅ Successfully loaded interview by ID with ${existingMessages.length} messages`);
+        } catch (error) {
+            console.error("❌ Error loading interview by ID:", error);
+            Alert.alert("Lỗi", "Không thể tải cuộc phỏng vấn. " + (error instanceof Error ? error.message : "Lỗi không xác định"), [
+                { text: "Quay lại", onPress: () => router.back() },
+            ]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const startInterview = async () => {
         if (!user) {
             Alert.alert("Lỗi", "Vui lòng đăng nhập để tiếp tục");
+            return;
+        }
+
+        // Skip starting a new interview if we're loading an existing one by ID
+        if (isExistingInterview) return;
+
+        // Validate required fields when starting a new interview
+        if (!interviewData.jobRequirements) {
+            Alert.alert("Lỗi", "Thiếu thông tin yêu cầu công việc");
+            router.back();
             return;
         }
 
@@ -220,13 +331,13 @@ export default function InterviewChatScreen() {
             }
 
             const interviewData_ = {
-                jobTitle: interviewData.jobTitle,
-                jobRequirement: interviewData.jobRequirements,
-                candidateDescription: interviewData.userInfo,
+                jobTitle: interviewData.jobTitle || "Không có tiêu đề",
+                jobRequirement: interviewData.jobRequirements || "",
+                candidateDescription: interviewData.userInfo || "",
                 skills: "",
                 category: "",
-                jobId: interviewData.jobId,
-                jobSource: interviewData.jobSource,
+                jobId: interviewData.jobId || "",
+                jobSource: interviewData.jobSource || "",
             };
 
             // Always use createOrContinueInterview - it will create new if old one was deleted
@@ -295,9 +406,9 @@ export default function InterviewChatScreen() {
 
             const result = await interviewService.createOrContinueInterview(
                 {
-                    jobTitle: interviewData.jobTitle,
-                    jobRequirement: interviewData.jobRequirements,
-                    candidateDescription: interviewData.userInfo,
+                    jobTitle: interviewData.jobTitle || "Không có tiêu đề",
+                    jobRequirement: interviewData.jobRequirements || "",
+                    candidateDescription: interviewData.userInfo || "",
                     answer: currentMessage,
                 },
                 token
@@ -343,7 +454,7 @@ export default function InterviewChatScreen() {
                     <View style={styles.headerTextContainer}>
                         <View style={styles.headerInfo}>
                             <ThemedText style={styles.headerTitle} numberOfLines={2} ellipsizeMode="tail">
-                                {interviewData.jobTitle}
+                                {interviewData.jobTitle || interviewDetails?.jobTitle || "Phỏng vấn"}
                             </ThemedText>
                         </View>
                         <View style={styles.statusContainer}>

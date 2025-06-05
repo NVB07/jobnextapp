@@ -87,14 +87,6 @@ export default function CVAnalysisScreen() {
                 if (nhuocDiemMatch) nhuocDiem = nhuocDiemMatch[1].trim();
             }
 
-            console.log("📊 Parsed sections:", {
-                hasDanhGia: !!sections.danhGiaChung,
-                hasDeXuat: !!sections.deXuatChinhSua,
-                hasLuuY: !!sections.luuY,
-                hasUuDiem: !!uuDiem,
-                hasNhuocDiem: !!nhuocDiem,
-            });
-
             return {
                 danhGiaChung: sections.danhGiaChung,
                 deXuatChinhSua: sections.deXuatChinhSua,
@@ -223,7 +215,6 @@ export default function CVAnalysisScreen() {
 
         console.log("🔄 Parsing Gemini AI content...");
         const content = tachNoiDungMarkdown(userData.userData.recommend);
-        console.log("📝 Parsed content:", content);
 
         // Type guard to check if content has the expected structure
         if ("error" in content) {
