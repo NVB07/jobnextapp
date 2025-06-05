@@ -166,6 +166,8 @@ export default function JobDetailScreen() {
                 company: job.company || "Chưa có tên công ty",
                 fromJobDetail: "true",
                 jobSource: job.jobSource,
+                skills: job.skills ? (typeof job.skills === "string" ? job.skills : job.skills.join(",")) : "",
+                category: job.category || job.groupJobFunctionV3NameVI || "",
             },
         });
     };

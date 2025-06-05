@@ -38,6 +38,9 @@ interface InterviewData {
     interviewType: "available" | "custom";
     jobId: string;
     jobSource: string;
+    uid: string;
+    skills?: string;
+    category?: string;
 }
 
 export default function InterviewChatScreen() {
@@ -70,6 +73,9 @@ export default function InterviewChatScreen() {
         interviewType: params.interviewType as "available" | "custom",
         jobId: params.jobId as string,
         jobSource: params.jobSource as string,
+        uid: params.uid as string,
+        skills: params.skills as string,
+        category: params.category as string,
     };
 
     // State
@@ -226,8 +232,13 @@ export default function InterviewChatScreen() {
                 interviewData.company = interview.company;
             }
 
+            // Always ensure we have the uid
+            interviewData.uid = user.uid;
+
             // Update the title in the header immediately
-            console.log(`📋 Updated interview data from API: jobTitle=${interviewData.jobTitle}, jobId=${interviewData.jobId}, company=${interviewData.company}`);
+            console.log(
+                `📋 Updated interview data from API: jobTitle=${interviewData.jobTitle}, jobId=${interviewData.jobId}, company=${interviewData.company}, uid=${interviewData.uid}`
+            );
 
             // Parse chat history to messages
             const existingMessages = interviewService.parseChatHistoryToMessages(interview.chatHistory || []);
@@ -332,13 +343,17 @@ export default function InterviewChatScreen() {
 
             const interviewData_ = {
                 jobTitle: interviewData.jobTitle || "Không có tiêu đề",
-                jobRequirement: interviewData.jobRequirements || "",
-                candidateDescription: interviewData.userInfo || "",
-                skills: "",
-                category: "",
-                jobId: interviewData.jobId || "",
-                jobSource: interviewData.jobSource || "",
+                jobRequirement: interviewData.jobRequirements || interviewDetails?.jobRequirement || "",
+                candidateDescription: interviewData.userInfo || interviewDetails?.candidateDescription || "",
+                skills: interviewData.skills || interviewDetails?.skills || "",
+                category: interviewData.category || interviewDetails?.category || "",
+                jobId: interviewData.jobId || interviewDetails?.jobId || "",
+                jobSource: interviewData.jobSource || interviewDetails?.jobSource || "",
+                uid: interviewData.uid || user?.uid || "", // Ensure uid is always included
             };
+
+            // Log what we're sending to the API for debugging
+            console.log("📤 Creating new interview with data:", JSON.stringify(interviewData_));
 
             // Always use createOrContinueInterview - it will create new if old one was deleted
             const result = await interviewService.createOrContinueInterview(interviewData_, token);
@@ -352,7 +367,7 @@ export default function InterviewChatScreen() {
             setMessages([messageObj]);
             setInterviewEnded(!messageObj.state);
         } catch (error) {
-            console.error("Error creating new interview:", error);
+            console.error("❌ Error creating new interview:", error);
             Alert.alert("Lỗi", "Có lỗi xảy ra khi tạo phỏng vấn mới");
         }
     };
@@ -404,15 +419,17 @@ export default function InterviewChatScreen() {
 
             const token = await currentUser.getIdToken();
 
-            const result = await interviewService.createOrContinueInterview(
-                {
-                    jobTitle: interviewData.jobTitle || "Không có tiêu đề",
-                    jobRequirement: interviewData.jobRequirements || "",
-                    candidateDescription: interviewData.userInfo || "",
-                    answer: currentMessage,
-                },
-                token
-            );
+            const requestData = {
+                jobTitle: interviewData.jobTitle || interviewDetails?.jobTitle || "Không có tiêu đề",
+                jobRequirement: interviewData.jobRequirements || interviewDetails?.jobRequirement || "",
+                candidateDescription: interviewData.userInfo || interviewDetails?.candidateDescription || "",
+                answer: currentMessage,
+                uid: interviewData.uid || user.uid || "",
+            };
+
+            console.log("📤 Sending message with data:", JSON.stringify(requestData));
+
+            const result = await interviewService.createOrContinueInterview(requestData, token);
 
             // Parse AI response
             const messageObj = interviewService.parseInterviewResponse(result.result);
@@ -431,7 +448,7 @@ export default function InterviewChatScreen() {
                 }, 1000);
             }
         } catch (error) {
-            console.error("Error sending message:", error);
+            console.error("❌ Error sending message:", error);
             Alert.alert("Lỗi", "Có lỗi xảy ra khi gửi tin nhắn");
         } finally {
             setIsLoading(false);
@@ -463,7 +480,97 @@ export default function InterviewChatScreen() {
                         </View>
                     </View>
 
-                    <TouchableOpacity style={styles.infoButton} activeOpacity={0.7}>
+                    <TouchableOpacity
+                        style={styles.infoButton}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                            Alert.alert("Tùy chọn", "Chọn hành động", [
+                                {
+                                    text: "Xem thông tin phỏng vấn",
+                                    onPress: () => {
+                                        Alert.alert(
+                                            "Thông tin phỏng vấn",
+                                            `Công việc: ${interviewData.jobTitle || interviewDetails?.jobTitle || "Không có tiêu đề"}\n\nYêu cầu công việc: ${
+                                                interviewData.jobRequirements || interviewDetails?.jobRequirement || "Không có thông tin"
+                                            }\n\nThông tin cá nhân: ${interviewData.userInfo || interviewDetails?.candidateDescription || "Không có thông tin"}`,
+                                            [{ text: "Đóng", style: "cancel" }]
+                                        );
+                                    },
+                                },
+                                interviewData.jobId
+                                    ? {
+                                          text: "Xem công việc",
+                                          onPress: () => {
+                                              router.push({
+                                                  pathname: "/job-detail",
+                                                  params: { jobId: interviewData.jobId },
+                                              });
+                                          },
+                                      }
+                                    : { text: "Xem công việc", style: "default" },
+                                {
+                                    text: "Phỏng vấn lại",
+                                    style: "destructive",
+                                    onPress: async () => {
+                                        if (!user) {
+                                            Alert.alert("Lỗi", "Vui lòng đăng nhập để tiếp tục");
+                                            return;
+                                        }
+
+                                        Alert.alert("Xác nhận", "Bạn có chắc muốn bắt đầu lại cuộc phỏng vấn này? Lịch sử phỏng vấn hiện tại sẽ bị xóa.", [
+                                            { text: "Hủy", style: "cancel" },
+                                            {
+                                                text: "Xác nhận",
+                                                style: "destructive",
+                                                onPress: async () => {
+                                                    try {
+                                                        setIsLoading(true);
+                                                        const currentUser = auth.currentUser;
+                                                        if (!currentUser) {
+                                                            Alert.alert("Lỗi", "Phiên đăng nhập đã hết hạn");
+                                                            return;
+                                                        }
+
+                                                        // Make sure we have the latest interview details
+                                                        if (interviewDetails && !interviewData.jobRequirements) {
+                                                            interviewData.jobRequirements = interviewDetails.jobRequirement;
+                                                            interviewData.userInfo = interviewDetails.candidateDescription;
+                                                            interviewData.jobTitle = interviewDetails.jobTitle;
+                                                            interviewData.company = interviewDetails.company;
+                                                            interviewData.jobId = interviewDetails.jobId;
+                                                            interviewData.jobSource = interviewDetails.jobSource;
+                                                            interviewData.uid = user.uid;
+
+                                                            console.log("🔄 Updated interview data from details:", {
+                                                                jobTitle: interviewData.jobTitle,
+                                                                hasJobRequirements: !!interviewData.jobRequirements,
+                                                                hasUserInfo: !!interviewData.userInfo,
+                                                                uid: interviewData.uid,
+                                                            });
+                                                        }
+
+                                                        const token = await currentUser.getIdToken();
+
+                                                        // Force create new interview
+                                                        await createNewInterview(token, true, interviewId || undefined);
+
+                                                        // Reset interview ended state
+                                                        setInterviewEnded(false);
+                                                    } catch (error) {
+                                                        console.error("❌ Error restarting interview:", error);
+                                                        Alert.alert("Lỗi", "Không thể khởi động lại cuộc phỏng vấn");
+                                                    } finally {
+                                                        setIsLoading(false);
+                                                    }
+                                                },
+                                            },
+                                        ]);
+                                    },
+                                },
+                                { text: "Đóng", style: "cancel" },
+                            ]);
+                        }}
+                    >
                         <IconSymbol name="info.circle" size={20} color="white" />
                     </TouchableOpacity>
                 </View>

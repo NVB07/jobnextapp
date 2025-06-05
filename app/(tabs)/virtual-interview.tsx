@@ -31,6 +31,8 @@ export default function VirtualInterviewScreen() {
               requirements: params.jobRequirements as string,
               company: params.company as string,
               jobSource: params.jobSource as string,
+              skills: params.skills as string,
+              category: params.category as string,
           }
         : null;
 
@@ -135,6 +137,11 @@ export default function VirtualInterviewScreen() {
             userId: user?.uid,
             createdAt: new Date().toISOString(),
             interviewType: activeTab,
+            uid: user?.uid,
+            skills: activeTab === "available" ? jobData?.skills || "" : "",
+            jobId: activeTab === "available" ? jobData?.id : "",
+            jobSource: activeTab === "available" ? jobData?.jobSource : "",
+            category: activeTab === "available" ? jobData?.category || "" : "",
         };
 
         console.log("🎯 Starting interview with data:", interviewData);
@@ -150,6 +157,9 @@ export default function VirtualInterviewScreen() {
             interviewType: activeTab,
             jobId: activeTab === "available" ? jobData?.id : "",
             jobSource: activeTab === "available" ? jobData?.jobSource : "",
+            uid: user?.uid,
+            skills: activeTab === "available" ? jobData?.skills || "" : "",
+            category: activeTab === "available" ? jobData?.category || "" : "",
         };
 
         router.push({
