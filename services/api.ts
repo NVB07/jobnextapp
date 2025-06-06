@@ -1229,6 +1229,196 @@ class ApiService {
     getListsCacheStats(): any {
         return listsCache.getStats();
     }
+
+    // CV Upload with basic functionality
+    async uploadCV(uid: string, fileUri: string, fileName: string, fileType: string): Promise<any> {
+        try {
+            console.log(`🚀 Uploading CV for user ${uid}`);
+
+            const formData = new FormData();
+            formData.append("cv", {
+                uri: fileUri,
+                type: fileType,
+                name: fileName,
+            } as any);
+            formData.append("uid", uid);
+
+            const response = await fetch(`${this.baseURL}/users/uploadcv`, {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+            }
+
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error("🚨 CV upload failed:", error);
+            throw error;
+        }
+    }
+
+    // Enhanced CV upload with progress tracking
+    uploadCVWithProgress(
+        uid: string,
+        fileUri: string,
+        fileName: string,
+        fileType: string,
+        callbacks: {
+            onProgress?: (data: any) => void;
+            onComplete?: (data: any) => void;
+            onError?: (error: any) => void;
+        } = {}
+    ): Promise<any> {
+        return new Promise(async (resolve, reject) => {
+            try {
+                console.log(`🚀 Uploading CV with progress for user ${uid}`);
+
+                // Start with initial progress
+                if (callbacks.onProgress) {
+                    callbacks.onProgress({ status: "start", progress: 5, message: "Bắt đầu tải lên..." });
+                }
+
+                const formData = new FormData();
+                formData.append("cv", {
+                    uri: fileUri,
+                    type: fileType,
+                    name: fileName,
+                } as any);
+                formData.append("uid", uid);
+
+                // Check user info
+                if (callbacks.onProgress) {
+                    callbacks.onProgress({ status: "checking", progress: 15, message: "Kiểm tra thông tin..." });
+                }
+
+                // Create an array of progress steps to simulate the upload progress
+                const progressSteps = [
+                    { status: "uploading", progress: 30, message: "Đang tải CV lên..." },
+                    { status: "uploading", progress: 45, message: "Đang tải CV lên..." },
+                    { status: "uploading", progress: 55, message: "Đang tải CV lên..." },
+                ];
+
+                // Simulate progress steps
+                let stepIndex = 0;
+                const progressInterval = setInterval(() => {
+                    if (stepIndex < progressSteps.length && callbacks.onProgress) {
+                        callbacks.onProgress(progressSteps[stepIndex]);
+                        stepIndex++;
+                    } else {
+                        clearInterval(progressInterval);
+                    }
+                }, 800);
+
+                // Make the actual upload request
+                try {
+                    const response = await fetch(`${this.baseURL}/users/uploadcv`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "multipart/form-data",
+                        },
+                        body: formData,
+                    });
+
+                    // Clear the interval regardless of the response
+                    clearInterval(progressInterval);
+
+                    if (!response.ok) {
+                        let errorMessage;
+                        try {
+                            // Try to parse error as JSON first
+                            const errorJson = await response.json();
+                            errorMessage = errorJson.message || errorJson.error || JSON.stringify(errorJson);
+                        } catch (e) {
+                            // If JSON parsing fails, get as text
+                            errorMessage = await response.text();
+                        }
+                        throw new Error(errorMessage || "Không thể tải lên CV");
+                    }
+
+                    // Clone the response to safely read it multiple times if needed
+                    const responseClone = response.clone();
+
+                    // Try to get the response as JSON first
+                    let responseData;
+                    try {
+                        responseData = await responseClone.json();
+                    } catch (e) {
+                        // If JSON parsing fails, get the response as text
+                        try {
+                            const textResponse = await response.text();
+                            responseData = { success: true, message: "Upload successful", rawResponse: textResponse };
+                        } catch (textError) {
+                            responseData = { success: true, message: "Upload successful" };
+                        }
+                    }
+
+                    // Upload finished, now analyzing
+                    if (callbacks.onProgress) {
+                        callbacks.onProgress({ status: "uploaded", progress: 65, message: "Đang phân tích CV..." });
+
+                        // Simulate analysis progress
+                        setTimeout(() => {
+                            if (callbacks.onProgress) {
+                                callbacks.onProgress({ status: "analyzing", progress: 80, message: "Đang phân tích CV..." });
+                            }
+
+                            setTimeout(() => {
+                                if (callbacks.onProgress) {
+                                    callbacks.onProgress({ status: "analyzed", progress: 95, message: "Phân tích hoàn tất..." });
+                                }
+
+                                setTimeout(() => {
+                                    if (callbacks.onProgress) {
+                                        callbacks.onProgress({ status: "completed", progress: 100, message: "Hoàn thành!" });
+                                    }
+
+                                    if (callbacks.onComplete) {
+                                        callbacks.onComplete({
+                                            success: true,
+                                            message: "CV đã được tải lên và phân tích thành công!",
+                                        });
+                                    }
+
+                                    // Resolve with the already parsed data
+                                    resolve(responseData);
+                                }, 500);
+                            }, 1000);
+                        }, 1000);
+                    } else {
+                        // No progress callbacks, just resolve with the data
+                        resolve(responseData);
+                    }
+                } catch (error) {
+                    // Make sure to clear the interval if there's an error
+                    clearInterval(progressInterval);
+
+                    console.error("🚨 CV upload error:", error);
+                    if (callbacks.onError) {
+                        callbacks.onError({
+                            success: false,
+                            message: error instanceof Error ? error.message : "Không thể tải lên CV. Vui lòng thử lại sau.",
+                            status: "error",
+                        });
+                    }
+                    reject(error);
+                }
+            } catch (error) {
+                console.error("🚨 Upload preparation error:", error);
+                if (callbacks.onError) {
+                    callbacks.onError({
+                        success: false,
+                        message: error instanceof Error ? error.message : "Không thể chuẩn bị tải lên CV. Vui lòng thử lại sau.",
+                        status: "error",
+                    });
+                }
+                reject(error);
+            }
+        });
+    }
 }
 export const apiService = new ApiService();
 

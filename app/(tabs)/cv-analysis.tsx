@@ -278,129 +278,118 @@ export default function CVAnalysisScreen() {
     };
 
     // Markdown styling
-    const markdownStyles = useMemo(
-        () => ({
-            body: {
-                fontSize: 14,
-                lineHeight: 22,
-                color: Colors[colorScheme ?? "light"].text,
-            },
-            paragraph: {
-                fontSize: 14,
-                lineHeight: 22,
-                color: Colors[colorScheme ?? "light"].text,
-                marginBottom: 10,
-            },
-            heading1: {
-                fontSize: 20,
-                fontWeight: "bold" as const,
-                color: Colors[colorScheme ?? "light"].text,
-                marginBottom: 12,
-                marginTop: 16,
-            },
-            heading2: {
-                fontSize: 18,
-                fontWeight: "bold" as const,
-                color: Colors[colorScheme ?? "light"].text,
-                marginBottom: 10,
-                marginTop: 14,
-            },
-            heading3: {
-                fontSize: 16,
-                fontWeight: "600" as const,
-                color: Colors[colorScheme ?? "light"].text,
-                marginBottom: 8,
-                marginTop: 12,
-            },
-            strong: {
-                fontWeight: "bold" as const,
-                color: Colors[colorScheme ?? "light"].text,
-            },
-            em: {
-                fontStyle: "italic" as const,
-                color: Colors[colorScheme ?? "light"].text,
-            },
-            list_item: {
-                fontSize: 14,
-                lineHeight: 22,
-                color: Colors[colorScheme ?? "light"].text,
-                marginBottom: 4,
-            },
-            bullet_list: {
-                marginBottom: 10,
-            },
-            ordered_list: {
-                marginBottom: 10,
-            },
-            blockquote: {
-                borderLeftWidth: 4,
-                borderLeftColor: Colors[colorScheme ?? "light"].tint,
-                paddingLeft: 12,
-                backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)",
-                paddingVertical: 6,
-                marginVertical: 8,
-                borderRadius: 4,
-            },
-            code_inline: {
-                fontFamily: "monospace",
-                backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
-                paddingHorizontal: 4,
-                borderRadius: 3,
-                color: colorScheme === "dark" ? Colors[colorScheme].text : Colors["light"].text,
-            },
-            code_block: {
-                backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)",
-                padding: 10,
-                borderRadius: 4,
-                fontFamily: "monospace",
-                color: Colors[colorScheme ?? "light"].text,
-            },
-            fence: {
-                backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)",
-                padding: 10,
-                borderRadius: 4,
-                fontFamily: "monospace",
-                color: Colors[colorScheme ?? "light"].text,
-            },
-            image: {
-                borderRadius: 8,
-                marginVertical: 8,
-            },
-            link: {
-                color: Colors[colorScheme ?? "light"].tint,
-                textDecorationLine: "underline" as "underline",
-            },
-            table: {
-                borderWidth: 1,
-                borderColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)",
-                borderRadius: 4,
-                marginVertical: 10,
-            },
-            thead: {
-                backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
-            },
-            th: {
-                padding: 8,
-                fontSize: 14,
-                fontWeight: "bold",
-                color: Colors[colorScheme ?? "light"].text,
-            },
-            td: {
-                padding: 8,
-                fontSize: 14,
-                color: Colors[colorScheme ?? "light"].text,
-            },
-        }),
-        [colorScheme]
-    );
-
-    // Theo dõi thay đổi màu sắc
-    const [markdownKey, setMarkdownKey] = useState(Date.now());
-
-    // Cập nhật key khi colorScheme thay đổi để buộc Markdown re-render
-    useEffect(() => {
-        setMarkdownKey(Date.now());
-    }, [colorScheme]);
+    const getMarkdownStyles = () => ({
+        body: {
+            fontSize: 14,
+            lineHeight: 22,
+            color: Colors[colorScheme ?? "light"].text,
+        },
+        paragraph: {
+            fontSize: 14,
+            lineHeight: 22,
+            color: Colors[colorScheme ?? "light"].text,
+            marginBottom: 10,
+        },
+        heading1: {
+            fontSize: 20,
+            fontWeight: "bold" as const,
+            color: Colors[colorScheme ?? "light"].text,
+            marginBottom: 12,
+            marginTop: 16,
+        },
+        heading2: {
+            fontSize: 18,
+            fontWeight: "bold" as const,
+            color: Colors[colorScheme ?? "light"].text,
+            marginBottom: 10,
+            marginTop: 14,
+        },
+        heading3: {
+            fontSize: 16,
+            fontWeight: "600" as const,
+            color: Colors[colorScheme ?? "light"].text,
+            marginBottom: 8,
+            marginTop: 12,
+        },
+        strong: {
+            fontWeight: "bold" as const,
+            color: Colors[colorScheme ?? "light"].text,
+        },
+        em: {
+            fontStyle: "italic" as const,
+            color: Colors[colorScheme ?? "light"].text,
+        },
+        list_item: {
+            fontSize: 14,
+            lineHeight: 22,
+            color: Colors[colorScheme ?? "light"].text,
+            marginBottom: 4,
+        },
+        bullet_list: {
+            marginBottom: 10,
+        },
+        ordered_list: {
+            marginBottom: 10,
+        },
+        blockquote: {
+            borderLeftWidth: 4,
+            borderLeftColor: Colors[colorScheme ?? "light"].tint,
+            paddingLeft: 12,
+            backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)",
+            paddingVertical: 6,
+            marginVertical: 8,
+            borderRadius: 4,
+        },
+        code_inline: {
+            fontFamily: "monospace",
+            backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
+            paddingHorizontal: 4,
+            borderRadius: 3,
+            color: colorScheme === "dark" ? Colors[colorScheme].text : Colors["light"].text,
+        },
+        code_block: {
+            backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)",
+            padding: 10,
+            borderRadius: 4,
+            fontFamily: "monospace",
+            color: Colors[colorScheme ?? "light"].text,
+        },
+        fence: {
+            backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)",
+            padding: 10,
+            borderRadius: 4,
+            fontFamily: "monospace",
+            color: Colors[colorScheme ?? "light"].text,
+        },
+        image: {
+            borderRadius: 8,
+            marginVertical: 8,
+        },
+        link: {
+            color: Colors[colorScheme ?? "light"].tint,
+            textDecorationLine: "underline" as "underline",
+        },
+        table: {
+            borderWidth: 1,
+            borderColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)",
+            borderRadius: 4,
+            marginVertical: 10,
+        },
+        thead: {
+            backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
+        },
+        th: {
+            padding: 8,
+            fontSize: 14,
+            fontWeight: "bold",
+            color: Colors[colorScheme ?? "light"].text,
+        },
+        td: {
+            padding: 8,
+            fontSize: 14,
+            color: Colors[colorScheme ?? "light"].text,
+        },
+    });
 
     useEffect(() => {
         if (user?.uid) {
@@ -511,8 +500,7 @@ export default function CVAnalysisScreen() {
                                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Ưu điểm:</Text>
 
                                 <Markdown
-                                    key={markdownKey}
-                                    style={markdownStyles}
+                                    style={getMarkdownStyles()}
                                     rules={{
                                         image: customImageRenderer,
                                     }}
@@ -528,8 +516,7 @@ export default function CVAnalysisScreen() {
                                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Nhược điểm:</Text>
 
                                 <Markdown
-                                    key={markdownKey}
-                                    style={markdownStyles}
+                                    style={getMarkdownStyles()}
                                     rules={{
                                         image: customImageRenderer,
                                     }}
@@ -691,8 +678,7 @@ export default function CVAnalysisScreen() {
                                 <Text style={[styles.sectionTitle, { color: "#059669" }]}>Cần chỉnh sửa chi tiết:</Text>
 
                                 <Markdown
-                                    key={markdownKey}
-                                    style={markdownStyles}
+                                    style={getMarkdownStyles()}
                                     rules={{
                                         image: customImageRenderer,
                                     }}
@@ -714,8 +700,7 @@ export default function CVAnalysisScreen() {
                                 <Text style={[styles.sectionTitle, { color: "#2563EB" }]}>Cần thêm:</Text>
 
                                 <Markdown
-                                    key={markdownKey}
-                                    style={markdownStyles}
+                                    style={getMarkdownStyles()}
                                     rules={{
                                         image: customImageRenderer,
                                     }}
@@ -737,8 +722,7 @@ export default function CVAnalysisScreen() {
                                 <Text style={[styles.sectionTitle, { color: "#F59E0B" }]}>Lưu ý:</Text>
 
                                 <Markdown
-                                    key={markdownKey}
-                                    style={markdownStyles}
+                                    style={getMarkdownStyles()}
                                     rules={{
                                         image: customImageRenderer,
                                     }}
@@ -766,14 +750,13 @@ export default function CVAnalysisScreen() {
                   })
                 : userData.userData.recommend
             : null,
-        colorScheme,
     ]);
 
     // Memoize the CV info card to prevent unnecessary re-renders
     const memoizedCVInfoCard = useMemo(() => {
         console.log("🔄 Memoizing CV info card");
         return renderCVInfoCard();
-    }, [userData?.userData?.profile?.Job_position, userData?.userData?.profile?.Years_of_experience, userData?.userData?.PDF_CV_URL, userData?.updatedAt, colorScheme]);
+    }, [userData?.userData?.profile?.Job_position, userData?.userData?.profile?.Years_of_experience, userData?.userData?.PDF_CV_URL, userData?.updatedAt]);
 
     // Memoize the suggestions card to prevent unnecessary re-renders
     const memoizedSuggestionsCard = useMemo(() => {
@@ -789,7 +772,6 @@ export default function CVAnalysisScreen() {
                   })
                 : userData.userData.recommend
             : null,
-        colorScheme,
     ]);
 
     if (loading) {

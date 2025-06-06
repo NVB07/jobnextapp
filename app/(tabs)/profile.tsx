@@ -1,9 +1,24 @@
-import React, { useState, useEffect } from "react";
-import { StyleSheet, ScrollView, TouchableOpacity, View, Alert, Dimensions, StatusBar, RefreshControl, ActivityIndicator } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import {
+    StyleSheet,
+    ScrollView,
+    TouchableOpacity,
+    View,
+    Alert,
+    Dimensions,
+    StatusBar,
+    RefreshControl,
+    ActivityIndicator,
+    Modal,
+    ToastAndroid,
+    Platform,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { auth } from "../../config/firebase";
+import * as DocumentPicker from "expo-document-picker";
+import ENV from "../../config/env";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -45,6 +60,16 @@ export default function ProfileScreen() {
         savedJobs: 0,
     });
     const [refreshing, setRefreshing] = useState(false);
+    const [editModalVisible, setEditModalVisible] = useState(false);
+    const [cvUploadModalVisible, setCvUploadModalVisible] = useState(false);
+    const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerResult | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadStatusText, setUploadStatusText] = useState("");
+    const [showUploadProgress, setShowUploadProgress] = useState(false);
+    const [uploadComplete, setUploadComplete] = useState(false);
+    const [uploadSuccess, setUploadSuccess] = useState(true);
+    const toastId = useRef<string | null>(null);
 
     // Fetch user statistics
     const fetchUserStats = async () => {
@@ -133,6 +158,117 @@ export default function ProfileScreen() {
                 },
             },
         ]);
+    };
+
+    const handleEditPress = () => {
+        setEditModalVisible(true);
+    };
+
+    const handleEditOption = (option: string) => {
+        setEditModalVisible(false);
+        if (option === "form") {
+            // Navigate to form edit screen
+            Alert.alert("Chỉnh sửa", "Chuyển đến form nhập thông tin");
+        } else if (option === "cv") {
+            // Show CV upload modal
+            setCvUploadModalVisible(true);
+        }
+    };
+
+    const showToast = (message: string) => {
+        if (Platform.OS === "android") {
+            ToastAndroid.show(message, ToastAndroid.SHORT);
+        } else {
+            // On iOS we would use a custom toast component
+            // For now we'll use console.log
+            console.log(message);
+        }
+    };
+
+    const pickDocument = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: ["application/pdf"],
+                copyToCacheDirectory: true,
+            });
+
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                setSelectedFile(result);
+            }
+        } catch (error) {
+            Alert.alert("Lỗi", "Không thể chọn file CV");
+            console.error(error);
+        }
+    };
+
+    const handleCloseUploadProgress = () => {
+        setShowUploadProgress(false);
+        setUploadComplete(false);
+        setUploadProgress(0);
+        setUploadStatusText("");
+    };
+
+    const handleUploadCV = async () => {
+        if (!selectedFile || selectedFile.canceled || !user?.uid) {
+            Alert.alert("Thông báo", "Vui lòng chọn file PDF trước khi tải lên");
+            return;
+        }
+
+        try {
+            // Close modal first to allow user to continue using the app
+            setCvUploadModalVisible(false);
+
+            // Reset upload status before starting
+            setUploadComplete(false);
+            setUploadSuccess(true);
+
+            // Show upload progress UI
+            setShowUploadProgress(true);
+            setIsUploading(true);
+
+            const fileUri = selectedFile.assets[0].uri;
+            const fileName = selectedFile.assets[0].name;
+            const fileType = "application/pdf";
+
+            // Use the API service for upload with progress tracking
+            await apiService.uploadCVWithProgress(user.uid, fileUri, fileName, fileType, {
+                // Handle progress updates
+                onProgress: (data) => {
+                    setUploadProgress(data.progress);
+                    setUploadStatusText(data.message || "");
+                },
+
+                // Handle completion
+                onComplete: (data) => {
+                    setUploadProgress(100);
+                    setUploadStatusText(data.message || "Hoàn thành!");
+                    setUploadComplete(true);
+                    setUploadSuccess(true);
+
+                    // Reset states after completion
+                    setSelectedFile(null);
+                    setIsUploading(false);
+
+                    // Reload user stats
+                    fetchUserStats();
+                },
+
+                // Handle errors
+                onError: (error) => {
+                    console.error("Upload error:", error);
+                    setUploadStatusText(error.message || "Tải lên thất bại");
+                    setUploadComplete(true);
+                    setUploadSuccess(false);
+                    setIsUploading(false);
+                },
+            });
+        } catch (error) {
+            console.error("Error in handleUploadCV:", error);
+            setUploadStatusText("Lỗi xử lý");
+            setUploadComplete(true);
+            setUploadSuccess(false);
+            setIsUploading(false);
+        }
     };
 
     const StatCard = ({ title, value, icon, gradient, onPress }: { title: string; value: number; icon: string; gradient: [string, string]; onPress?: () => void }) => (
@@ -235,11 +371,108 @@ export default function ProfileScreen() {
                     </View>
                 </View>
 
-                <TouchableOpacity style={styles.editButton}>
+                <TouchableOpacity style={styles.editButton} onPress={handleEditPress}>
                     <IconSymbol name="pencil" size={16} color="white" />
                     <ThemedText style={styles.editButtonText}>Chỉnh sửa</ThemedText>
                 </TouchableOpacity>
             </LinearGradient>
+
+            {/* Edit Options Modal */}
+            <Modal animationType="fade" transparent={true} visible={editModalVisible} onRequestClose={() => setEditModalVisible(false)}>
+                <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setEditModalVisible(false)}>
+                    <View style={[styles.modalContainer, { backgroundColor: colors.cardBackground }]}>
+                        <View style={styles.modalContent}>
+                            <ThemedText style={[styles.modalTitle, { color: colors.text }]}>Chỉnh sửa hồ sơ</ThemedText>
+
+                            <TouchableOpacity style={[styles.modalOption, { backgroundColor: colors.border }]} onPress={() => handleEditOption("form")}>
+                                <IconSymbol name="person.text.rectangle" size={22} color={colors.tint} />
+                                <ThemedText style={[styles.modalOptionText, { color: colors.text }]}>Nhập thông tin</ThemedText>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={[styles.modalOption, { backgroundColor: colors.border }]} onPress={() => handleEditOption("cv")}>
+                                <IconSymbol name="doc.on.doc" size={22} color={colors.tint} />
+                                <ThemedText style={[styles.modalOptionText, { color: colors.text }]}>Tải lên CV</ThemedText>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
+            {/* CV Upload Modal */}
+            <Modal
+                animationType="fade"
+                transparent={true}
+                visible={cvUploadModalVisible}
+                onRequestClose={() => {
+                    setCvUploadModalVisible(false);
+                    setSelectedFile(null);
+                }}
+            >
+                <View style={styles.modalOverlay}>
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        style={{ width: "100%", height: "100%", position: "absolute" }}
+                        onPress={() => {
+                            setCvUploadModalVisible(false);
+                            setSelectedFile(null);
+                        }}
+                    />
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        onPress={(e) => {
+                            // Stop event propagation
+                            e.stopPropagation();
+                        }}
+                    >
+                        <View style={[styles.uploadModalContent, { backgroundColor: colors.background }]}>
+                            <View style={styles.uploadModalHeader}>
+                                <ThemedText style={[styles.uploadModalTitle, { color: colors.text }]}>Tải lên CV</ThemedText>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setCvUploadModalVisible(false);
+                                        setSelectedFile(null);
+                                    }}
+                                >
+                                    <IconSymbol name="xmark.circle.fill" size={24} color={colors.icon} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <TouchableOpacity
+                                style={[styles.uploadArea, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
+                                onPress={pickDocument}
+                                activeOpacity={0.8}
+                            >
+                                <LinearGradient colors={colors.gradient} style={styles.uploadIcon}>
+                                    <IconSymbol name="doc.text.fill" size={32} color="white" />
+                                </LinearGradient>
+
+                                <ThemedText style={[styles.uploadTitle, { color: colors.text }]}>
+                                    {selectedFile && !selectedFile.canceled ? "CV đã chọn" : "Tải lên CV của bạn"}
+                                </ThemedText>
+
+                                {selectedFile && !selectedFile.canceled ? (
+                                    <ThemedText style={[styles.fileName, { color: colors.success }]}>{selectedFile.assets[0].name}</ThemedText>
+                                ) : (
+                                    <ThemedText style={[styles.uploadSubtitle, { color: colors.icon }]}>Chỉ hỗ trợ định dạng PDF</ThemedText>
+                                )}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[
+                                    styles.uploadButton,
+                                    {
+                                        backgroundColor: selectedFile && !selectedFile.canceled ? colors.tint : colors.border,
+                                        opacity: selectedFile && !selectedFile.canceled ? 1 : 0.6,
+                                    },
+                                ]}
+                                onPress={handleUploadCV}
+                            >
+                                <ThemedText style={styles.uploadButtonText}>Tải lên</ThemedText>
+                            </TouchableOpacity>
+                        </View>
+                    </TouchableOpacity>
+                </View>
+            </Modal>
 
             <ScrollView
                 style={styles.content}
@@ -256,7 +489,52 @@ export default function ProfileScreen() {
                     />
                 }
             >
-                {/* Profile Header */}
+                {/* CV Upload Progress - Only shown during/after upload */}
+                {showUploadProgress && (
+                    <View style={styles.uploadProgressSection}>
+                        <View style={[styles.uploadProgressCard, { backgroundColor: colors.cardBackground }]}>
+                            <View style={styles.uploadProgressHeader}>
+                                <ThemedText style={[styles.uploadProgressTitle, { color: colors.text }]}>
+                                    {uploadComplete ? (uploadSuccess ? "Tải lên thành công" : "Tải lên thất bại") : "Đang tải lên CV"}
+                                </ThemedText>
+
+                                <View style={styles.uploadProgressRight}>
+                                    <ThemedText style={[styles.uploadProgressPercent, { color: uploadSuccess ? colors.tint : colors.error }]}>
+                                        {uploadProgress}%
+                                    </ThemedText>
+
+                                    {uploadComplete && (
+                                        <TouchableOpacity onPress={handleCloseUploadProgress} style={styles.closeButton}>
+                                            <IconSymbol name="xmark.circle.fill" size={22} color={colors.icon} />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </View>
+
+                            <View style={styles.uploadProgressStatusContainer}>
+                                <ThemedText style={[styles.uploadProgressStatus, { color: colors.text }]}>{uploadStatusText}</ThemedText>
+                                {isUploading && <ActivityIndicator size="small" color={colors.tint} style={styles.uploadProgressIndicator} />}
+                                {uploadComplete && uploadSuccess && <IconSymbol name="checkmark.circle.fill" size={20} color={colors.success} />}
+                                {uploadComplete && !uploadSuccess && <IconSymbol name="xmark.circle.fill" size={20} color={colors.error} />}
+                            </View>
+
+                            <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+                                <LinearGradient
+                                    colors={uploadSuccess ? colors.gradient : ["#f43f5e", "#ef4444"]}
+                                    style={[styles.progressFill, { width: `${uploadProgress}%` }]}
+                                />
+                            </View>
+
+                            <ThemedText style={[styles.uploadProgressInfo, { color: colors.icon }]}>
+                                {uploadComplete
+                                    ? uploadSuccess
+                                        ? "CV đã được tải lên và phân tích thành công!"
+                                        : "Có lỗi xảy ra. Vui lòng thử lại sau."
+                                    : "Quá trình tải lên và phân tích có thể mất vài phút..."}
+                            </ThemedText>
+                        </View>
+                    </View>
+                )}
 
                 {/* Profile Completeness */}
                 <View style={styles.completenessSection}>
@@ -572,5 +850,162 @@ const styles = StyleSheet.create({
     },
     logoutSection: {
         marginTop: 16,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    modalContainer: {
+        width: width * 0.85,
+        borderRadius: 20,
+        overflow: "hidden",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    modalContent: {
+        padding: 24,
+        gap: 16,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: "bold",
+        marginBottom: 8,
+        textAlign: "center",
+    },
+    modalOption: {
+        flexDirection: "row",
+        alignItems: "center",
+        padding: 16,
+        borderRadius: 12,
+        gap: 12,
+    },
+    modalOptionText: {
+        fontSize: 16,
+        fontWeight: "500",
+    },
+    // CV Upload Modal Styles
+    uploadModalContent: {
+        width: width * 0.85,
+        borderRadius: 20,
+        padding: 24,
+        backgroundColor: "#fff",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    uploadModalHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 24,
+    },
+    uploadModalTitle: {
+        fontSize: 20,
+        fontWeight: "bold",
+    },
+    uploadModalBody: {
+        gap: 24,
+    },
+    uploadArea: {
+        padding: 24,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderStyle: "dashed",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+    },
+    uploadIcon: {
+        width: 64,
+        height: 64,
+        borderRadius: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 8,
+    },
+    uploadTitle: {
+        fontSize: 18,
+        fontWeight: "bold",
+    },
+    uploadSubtitle: {
+        fontSize: 14,
+        textAlign: "center",
+    },
+    fileName: {
+        fontSize: 14,
+        fontWeight: "500",
+    },
+    uploadButton: {
+        paddingVertical: 16,
+        borderRadius: 12,
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 8,
+    },
+    uploadButtonText: {
+        fontSize: 16,
+        fontWeight: "bold",
+        color: "white",
+    },
+    uploadProgressSection: {
+        padding: 24,
+    },
+    uploadProgressCard: {
+        padding: 20,
+        borderRadius: 16,
+        gap: 12,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 6,
+    },
+    uploadProgressHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+    },
+    uploadProgressTitle: {
+        fontSize: 18,
+        fontWeight: "bold",
+        flex: 1,
+    },
+    uploadProgressRight: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    uploadProgressPercent: {
+        fontSize: 18,
+        fontWeight: "bold",
+    },
+    uploadProgressStatusContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginTop: 4,
+    },
+    uploadProgressStatus: {
+        fontSize: 16,
+        fontWeight: "500",
+        flex: 1,
+    },
+    uploadProgressIndicator: {
+        marginLeft: 8,
+    },
+    uploadProgressInfo: {
+        fontSize: 12,
+        lineHeight: 16,
+        marginTop: 4,
+    },
+    closeButton: {
+        padding: 4,
     },
 });
