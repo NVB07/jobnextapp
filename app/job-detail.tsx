@@ -28,6 +28,7 @@ export default function JobDetailScreen() {
     // Parse job data from params - now supports detailed job data
     const initialJob: Job = params.jobData ? JSON.parse(params.jobData as string) : null;
     const canLoadDetails = params.canLoadDetails === "true";
+    const fromInterview = params.fromInterview === "true";
 
     // State for detailed job information
     const [job, setJob] = useState<JobWithDetail>(initialJob);
@@ -750,34 +751,36 @@ export default function JobDetailScreen() {
 
             {/* Dual Action Buttons */}
             <View style={[styles.actionContainer, { backgroundColor: colors.background, paddingBottom: insets.bottom }]}>
-                <TouchableOpacity
-                    disabled={loadingDetails}
-                    style={[styles.virtualInterviewButton, loadingDetails && { opacity: 0.5 }]}
-                    onPress={handleVirtualInterview}
-                    activeOpacity={0.8}
-                >
-                    {loadingDetails ? (
-                        <Animated.View
-                            style={{
-                                transform: [
-                                    {
-                                        rotate: spinAnimation.interpolate({
-                                            inputRange: [0, 1],
-                                            outputRange: ["0deg", "360deg"],
-                                        }),
-                                    },
-                                ],
-                            }}
-                        >
-                            <IconSymbol name="arrow.clockwise" size={14} color={colors.tint} />
-                        </Animated.View>
-                    ) : (
-                        <IconSymbol name="video.fill" size={16} color={colors.text} />
-                    )}
-                    <ThemedText style={styles.virtualInterviewText}>Phỏng vấn ảo</ThemedText>
-                </TouchableOpacity>
+                {!fromInterview && (
+                    <TouchableOpacity
+                        disabled={loadingDetails}
+                        style={[styles.virtualInterviewButton, loadingDetails && { opacity: 0.5 }]}
+                        onPress={handleVirtualInterview}
+                        activeOpacity={0.8}
+                    >
+                        {loadingDetails ? (
+                            <Animated.View
+                                style={{
+                                    transform: [
+                                        {
+                                            rotate: spinAnimation.interpolate({
+                                                inputRange: [0, 1],
+                                                outputRange: ["0deg", "360deg"],
+                                            }),
+                                        },
+                                    ],
+                                }}
+                            >
+                                <IconSymbol name="arrow.clockwise" size={14} color={colors.tint} />
+                            </Animated.View>
+                        ) : (
+                            <IconSymbol name="video.fill" size={16} color={colors.text} />
+                        )}
+                        <ThemedText style={styles.virtualInterviewText}>Phỏng vấn ảo</ThemedText>
+                    </TouchableOpacity>
+                )}
 
-                <LinearGradient colors={["#6366f1", "#8b5cf6"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.applyButton}>
+                <LinearGradient colors={["#6366f1", "#8b5cf6"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.applyButton, fromInterview && { flex: 1 }]}>
                     <TouchableOpacity style={styles.applyButtonContent} onPress={handleApply} activeOpacity={0.8}>
                         <IconSymbol name="arrow.up.right" size={16} color="white" />
                         <ThemedText style={styles.applyButtonText}>Ứng tuyển</ThemedText>

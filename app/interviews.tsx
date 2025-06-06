@@ -251,9 +251,9 @@ export default function InterviewsScreen() {
                                     ];
 
                                     return (
-                                        <LinearGradient key={index} colors={gradientColors[index % 3] as [string, string]} style={styles.skillTag}>
+                                        <View key={index} style={[styles.skillTag, { backgroundColor: colors.border }]}>
                                             <ThemedText style={styles.skillText}>{skill.trim()}</ThemedText>
-                                        </LinearGradient>
+                                        </View>
                                     );
                                 })}
                         </View>

@@ -12,6 +12,9 @@ import {
     Platform,
     Animated,
     Keyboard,
+    Modal,
+    ViewStyle,
+    TextStyle,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -41,6 +44,74 @@ interface InterviewData {
     uid: string;
     skills?: string;
     category?: string;
+}
+
+// Define extended styles interface to fix TypeScript errors
+interface ExtendedStyles {
+    container: ViewStyle;
+    headerContainer: ViewStyle;
+    header: ViewStyle;
+    headerContent: ViewStyle;
+    backButton: ViewStyle;
+    headerTextContainer: ViewStyle;
+    headerInfo: ViewStyle;
+    headerTitle: TextStyle;
+    statusContainer: ViewStyle;
+    statusDot: ViewStyle;
+    statusText: TextStyle;
+    infoButton: ViewStyle;
+    content: ViewStyle;
+    messagesContainer: ViewStyle;
+    messagesContent: ViewStyle;
+    messageRow: ViewStyle;
+    userMessageRow: ViewStyle;
+    aiMessageRow: ViewStyle;
+    messageContainer: ViewStyle;
+    userMessageContainer: ViewStyle;
+    aiMessageContainer: ViewStyle;
+    messageBubble: ViewStyle;
+    userMessage: ViewStyle;
+    aiMessage: ViewStyle;
+    userMessageGradient: ViewStyle;
+    userMessageText: TextStyle;
+    aiMessageContent: ViewStyle;
+    aiMessageText: TextStyle;
+    senderName: TextStyle;
+    messageTime: TextStyle;
+    inputContainer: ViewStyle;
+    inputWrapper: ViewStyle;
+    inputContent: ViewStyle;
+    textInput: TextStyle;
+    sendButton: ViewStyle;
+    sendButtonGradient: ViewStyle;
+    inputFooter: ViewStyle;
+    poweredBy: ViewStyle;
+    helperText: TextStyle;
+    characterCount: TextStyle;
+    avatar: ViewStyle;
+    userAvatar: ViewStyle;
+    aiAvatar: ViewStyle;
+    userAvatarGradient: ViewStyle;
+    aiAvatarGradient: ViewStyle;
+    typingIndicator: ViewStyle;
+    typingText: TextStyle;
+    typingDots: ViewStyle;
+    typingDot: ViewStyle;
+    scoreContainer: ViewStyle;
+    scoreGradient: ViewStyle;
+    scoreText: TextStyle;
+    modalOverlay: ViewStyle;
+    modalContainer: ViewStyle;
+    modalHeader: ViewStyle;
+    modalHeaderGradient: ViewStyle;
+    modalTitle: TextStyle;
+    modalContent: ViewStyle;
+    infoSection: ViewStyle;
+    infoLabel: TextStyle;
+    infoValue: TextStyle;
+    closeButton: ViewStyle;
+    closeButtonGradient: ViewStyle;
+    closeButtonText: TextStyle;
 }
 
 export default function InterviewChatScreen() {
@@ -87,6 +158,7 @@ export default function InterviewChatScreen() {
     const [keyboardHeight, setKeyboardHeight] = useState(0);
     const [interviewDetails, setInterviewDetails] = useState<any>(null);
     const scrollViewRef = useRef<ScrollView>(null);
+    const [showInfoModal, setShowInfoModal] = useState(false);
 
     // Animation values
     const typingAnimation1 = useRef(new Animated.Value(0)).current;
@@ -488,22 +560,33 @@ export default function InterviewChatScreen() {
                                 {
                                     text: "Xem thông tin phỏng vấn",
                                     onPress: () => {
-                                        Alert.alert(
-                                            "Thông tin phỏng vấn",
-                                            `Công việc: ${interviewData.jobTitle || interviewDetails?.jobTitle || "Không có tiêu đề"}\n\nYêu cầu công việc: ${
-                                                interviewData.jobRequirements || interviewDetails?.jobRequirement || "Không có thông tin"
-                                            }\n\nThông tin cá nhân: ${interviewData.userInfo || interviewDetails?.candidateDescription || "Không có thông tin"}`,
-                                            [{ text: "Đóng", style: "cancel" }]
-                                        );
+                                        setShowInfoModal(true);
                                     },
                                 },
-                                interviewData.jobId
+                                interviewData.jobId || interviewDetails?.jobId
                                     ? {
                                           text: "Xem công việc",
                                           onPress: () => {
                                               router.push({
                                                   pathname: "/job-detail",
-                                                  params: { jobId: interviewData.jobId },
+                                                  params: {
+                                                      jobId: interviewData.jobId || interviewDetails?.jobId,
+                                                      jobData: JSON.stringify({
+                                                          _id: interviewData.jobId || interviewDetails?.jobId,
+                                                          title: interviewData.jobTitle || interviewDetails?.jobTitle,
+                                                          company: interviewData.company || interviewDetails?.company,
+                                                          jobRequirement: interviewData.jobRequirements || interviewDetails?.jobRequirement,
+                                                          jobSource: interviewData.jobSource || interviewDetails?.jobSource,
+                                                          url:
+                                                              interviewData.jobId || interviewDetails?.jobId
+                                                                  ? `https://jobnext-rosy.vercel.app/jobs/${interviewData.jobId || interviewDetails?.jobId}`
+                                                                  : undefined,
+                                                          skills: interviewData.skills || interviewDetails?.skills,
+                                                          category: interviewData.category || interviewDetails?.category,
+                                                      }),
+                                                      canLoadDetails: "false",
+                                                      fromInterview: "true",
+                                                  },
                                               });
                                           },
                                       }
@@ -652,11 +735,55 @@ export default function InterviewChatScreen() {
         </View>
     );
 
+    const renderInterviewInfoModal = () => (
+        <Modal visible={showInfoModal} transparent={true} animationType="fade" onRequestClose={() => setShowInfoModal(false)}>
+            <View style={styles.modalOverlay}>
+                <View style={[styles.modalContainer, { backgroundColor: colors.cardBackground }]}>
+                    <View style={styles.modalHeader}>
+                        <LinearGradient colors={["#4c63d2", "#6366f1", "#8b5cf6"]} style={styles.modalHeaderGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                            <ThemedText style={styles.modalTitle}>Thông tin phỏng vấn</ThemedText>
+                        </LinearGradient>
+                    </View>
+
+                    <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+                        <View style={styles.infoSection}>
+                            <ThemedText style={styles.infoLabel}>Công việc</ThemedText>
+                            <ThemedText style={[styles.infoValue, { color: colors.text }]}>
+                                {interviewData.jobTitle || interviewDetails?.jobTitle || "Không có tiêu đề"}
+                            </ThemedText>
+                        </View>
+
+                        <View style={styles.infoSection}>
+                            <ThemedText style={styles.infoLabel}>Yêu cầu công việc</ThemedText>
+                            <ThemedText style={[styles.infoValue, { color: colors.text }]}>
+                                {interviewData.jobRequirements || interviewDetails?.jobRequirement || "Không có thông tin"}
+                            </ThemedText>
+                        </View>
+
+                        <View style={styles.infoSection}>
+                            <ThemedText style={styles.infoLabel}>Thông tin cá nhân</ThemedText>
+                            <ThemedText style={[styles.infoValue, { color: colors.text }]}>
+                                {interviewData.userInfo || interviewDetails?.candidateDescription || "Không có thông tin"}
+                            </ThemedText>
+                        </View>
+                    </ScrollView>
+
+                    <TouchableOpacity style={styles.closeButton} onPress={() => setShowInfoModal(false)}>
+                        <LinearGradient colors={["#6366f1", "#8b5cf6"]} style={styles.closeButtonGradient}>
+                            <ThemedText style={styles.closeButtonText}>Đóng</ThemedText>
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </Modal>
+    );
+
     return (
         <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
             {renderHeader()}
+            {renderInterviewInfoModal()}
 
             <KeyboardAvoidingView style={styles.content} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}>
                 <ScrollView
@@ -733,7 +860,7 @@ export default function InterviewChatScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create<ExtendedStyles>({
     container: {
         flex: 1,
     },
@@ -1056,6 +1183,69 @@ const styles = StyleSheet.create({
     scoreText: {
         fontSize: 11,
         fontWeight: "700",
+        color: "white",
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.5)",
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 20,
+    },
+    modalContainer: {
+        width: "90%",
+        maxHeight: "80%",
+        borderRadius: 24,
+        overflow: "hidden",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.25,
+        shadowRadius: 16,
+        elevation: 16,
+    },
+    modalHeader: {
+        width: "100%",
+        overflow: "hidden",
+    },
+    modalHeaderGradient: {
+        padding: 20,
+        alignItems: "center",
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: "700",
+        color: "white",
+    },
+    modalContent: {
+        padding: 20,
+        maxHeight: 400,
+    },
+    infoSection: {
+        marginBottom: 20,
+    },
+    infoLabel: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: "#6366f1",
+        marginBottom: 8,
+    },
+    infoValue: {
+        fontSize: 15,
+        lineHeight: 22,
+        fontWeight: "400",
+    },
+    closeButton: {
+        margin: 20,
+        borderRadius: 12,
+        overflow: "hidden",
+    },
+    closeButtonGradient: {
+        paddingVertical: 12,
+        alignItems: "center",
+    },
+    closeButtonText: {
+        fontSize: 16,
+        fontWeight: "600",
         color: "white",
     },
 });
