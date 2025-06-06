@@ -278,68 +278,129 @@ export default function CVAnalysisScreen() {
     };
 
     // Markdown styling
-    const getMarkdownStyles = () => ({
-        body: {
-            fontSize: 14,
-            lineHeight: 22,
-            color: Colors[colorScheme ?? "light"].text,
-        },
-        paragraph: {
-            fontSize: 14,
-            lineHeight: 22,
-            color: Colors[colorScheme ?? "light"].text,
-            marginBottom: 10,
-        },
-        heading1: {
-            fontSize: 20,
-            fontWeight: "bold" as const,
-            color: Colors[colorScheme ?? "light"].text,
-            marginBottom: 12,
-            marginTop: 16,
-        },
-        heading2: {
-            fontSize: 18,
-            fontWeight: "bold" as const,
-            color: Colors[colorScheme ?? "light"].text,
-            marginBottom: 10,
-            marginTop: 14,
-        },
-        heading3: {
-            fontSize: 16,
-            fontWeight: "600" as const,
-            color: Colors[colorScheme ?? "light"].text,
-            marginBottom: 8,
-            marginTop: 12,
-        },
-        strong: {
-            fontWeight: "bold" as const,
-            color: Colors[colorScheme ?? "light"].text,
-        },
-        em: {
-            fontStyle: "italic" as const,
-            color: Colors[colorScheme ?? "light"].text,
-        },
-        list_item: {
-            fontSize: 14,
-            lineHeight: 22,
-            color: Colors[colorScheme ?? "light"].text,
-            marginBottom: 4,
-        },
-        bullet_list: {
-            marginBottom: 10,
-        },
-        ordered_list: {
-            marginBottom: 10,
-        },
-        blockquote: {
-            borderLeftWidth: 4,
-            borderLeftColor: Colors[colorScheme ?? "light"].tint,
-            paddingLeft: 12,
-            backgroundColor: Colors[colorScheme ?? "light"].border + "30",
-            paddingVertical: 6,
-            marginVertical: 8,
-        },
-    });
+    const markdownStyles = useMemo(
+        () => ({
+            body: {
+                fontSize: 14,
+                lineHeight: 22,
+                color: Colors[colorScheme ?? "light"].text,
+            },
+            paragraph: {
+                fontSize: 14,
+                lineHeight: 22,
+                color: Colors[colorScheme ?? "light"].text,
+                marginBottom: 10,
+            },
+            heading1: {
+                fontSize: 20,
+                fontWeight: "bold" as const,
+                color: Colors[colorScheme ?? "light"].text,
+                marginBottom: 12,
+                marginTop: 16,
+            },
+            heading2: {
+                fontSize: 18,
+                fontWeight: "bold" as const,
+                color: Colors[colorScheme ?? "light"].text,
+                marginBottom: 10,
+                marginTop: 14,
+            },
+            heading3: {
+                fontSize: 16,
+                fontWeight: "600" as const,
+                color: Colors[colorScheme ?? "light"].text,
+                marginBottom: 8,
+                marginTop: 12,
+            },
+            strong: {
+                fontWeight: "bold" as const,
+                color: Colors[colorScheme ?? "light"].text,
+            },
+            em: {
+                fontStyle: "italic" as const,
+                color: Colors[colorScheme ?? "light"].text,
+            },
+            list_item: {
+                fontSize: 14,
+                lineHeight: 22,
+                color: Colors[colorScheme ?? "light"].text,
+                marginBottom: 4,
+            },
+            bullet_list: {
+                marginBottom: 10,
+            },
+            ordered_list: {
+                marginBottom: 10,
+            },
+            blockquote: {
+                borderLeftWidth: 4,
+                borderLeftColor: Colors[colorScheme ?? "light"].tint,
+                paddingLeft: 12,
+                backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)",
+                paddingVertical: 6,
+                marginVertical: 8,
+                borderRadius: 4,
+            },
+            code_inline: {
+                fontFamily: "monospace",
+                backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
+                paddingHorizontal: 4,
+                borderRadius: 3,
+                color: colorScheme === "dark" ? Colors[colorScheme].text : Colors["light"].text,
+            },
+            code_block: {
+                backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)",
+                padding: 10,
+                borderRadius: 4,
+                fontFamily: "monospace",
+                color: Colors[colorScheme ?? "light"].text,
+            },
+            fence: {
+                backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)",
+                padding: 10,
+                borderRadius: 4,
+                fontFamily: "monospace",
+                color: Colors[colorScheme ?? "light"].text,
+            },
+            image: {
+                borderRadius: 8,
+                marginVertical: 8,
+            },
+            link: {
+                color: Colors[colorScheme ?? "light"].tint,
+                textDecorationLine: "underline" as "underline",
+            },
+            table: {
+                borderWidth: 1,
+                borderColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.1)",
+                borderRadius: 4,
+                marginVertical: 10,
+            },
+            thead: {
+                backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
+            },
+            th: {
+                padding: 8,
+                fontSize: 14,
+                fontWeight: "bold",
+                color: Colors[colorScheme ?? "light"].text,
+            },
+            td: {
+                padding: 8,
+                fontSize: 14,
+                color: Colors[colorScheme ?? "light"].text,
+            },
+        }),
+        [colorScheme]
+    );
+
+    // Theo dõi thay đổi màu sắc
+    const [markdownKey, setMarkdownKey] = useState(Date.now());
+
+    // Cập nhật key khi colorScheme thay đổi để buộc Markdown re-render
+    useEffect(() => {
+        setMarkdownKey(Date.now());
+    }, [colorScheme]);
 
     useEffect(() => {
         if (user?.uid) {
@@ -400,21 +461,29 @@ export default function CVAnalysisScreen() {
             console.log("❌ Error parsing content:", content.error);
             // Show raw data for debugging
             return (
-                <View style={[styles.card, { backgroundColor: Colors[colorScheme ?? "light"].background, borderColor: Colors[colorScheme ?? "light"].border }]}>
+                <View style={[styles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
                     <LinearGradient colors={["#DC2626", "#EF4444"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardHeader}>
                         <Text style={styles.cardTitle}>⚠️ Lỗi phân tích dữ liệu</Text>
                         <Ionicons name="warning" size={20} color="white" style={styles.cardIcon} />
                     </LinearGradient>
 
-                    <View style={[styles.cardContent, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                    <View style={[styles.cardContent, { backgroundColor: colors.background }]}>
                         <View style={styles.section}>
                             <Text style={[styles.sectionTitle, { color: "#DC2626" }]}>🚫 Thông báo lỗi</Text>
-                            <Text style={[styles.generalText, { color: Colors[colorScheme ?? "light"].text }]}>{content.error}</Text>
+                            <Text style={[styles.generalText, { color: colors.text }]}>{content.error}</Text>
                         </View>
                         <View style={styles.section}>
                             <Text style={[styles.sectionTitle, { color: "#059669" }]}>📄 Dữ liệu gốc (500 ký tự đầu)</Text>
-                            <View style={styles.recommendationContainer}>
-                                <Text style={[styles.generalText, { color: Colors[colorScheme ?? "light"].text }]}>
+                            <View
+                                style={[
+                                    styles.recommendationContainer,
+                                    {
+                                        borderColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.06)",
+                                        backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.01)",
+                                    },
+                                ]}
+                            >
+                                <Text style={[styles.generalText, { color: colors.text }]}>
                                     {typeof userData.userData.recommend === "string"
                                         ? userData.userData.recommend.substring(0, 500) + "..."
                                         : JSON.stringify(userData.userData.recommend).substring(0, 500) + "..."}
@@ -429,20 +498,21 @@ export default function CVAnalysisScreen() {
         console.log("✅ Successfully parsed content, rendering card");
 
         return (
-            <View style={[styles.card, { backgroundColor: Colors[colorScheme ?? "light"].background, borderColor: Colors[colorScheme ?? "light"].border }]}>
+            <View style={[styles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
                 <LinearGradient colors={["#8B5CF6", "#7C3AED"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardHeader}>
                     <Text style={styles.cardTitle}>Tổng quan CV của bạn</Text>
                 </LinearGradient>
 
-                <View style={[styles.cardContent, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                <View style={[styles.cardContent, { backgroundColor: colors.background }]}>
                     <View style={styles.section}>
                         {/* Section: Ưu điểm */}
                         {content.danhGiaUuDiem && (
                             <View style={styles.subsection}>
-                                <Text style={[styles.sectionTitle, { color: Colors[colorScheme ?? "light"].text }]}>Ưu điểm:</Text>
+                                <Text style={[styles.sectionTitle, { color: colors.text }]}>Ưu điểm:</Text>
 
                                 <Markdown
-                                    style={getMarkdownStyles()}
+                                    key={markdownKey}
+                                    style={markdownStyles}
                                     rules={{
                                         image: customImageRenderer,
                                     }}
@@ -455,10 +525,11 @@ export default function CVAnalysisScreen() {
                         {/* Section: Nhược điểm */}
                         {content.danhGiaNhuocDiem && (
                             <View style={[styles.subsection, { marginTop: 16 }]}>
-                                <Text style={[styles.sectionTitle, { color: Colors[colorScheme ?? "light"].text }]}>Nhược điểm:</Text>
+                                <Text style={[styles.sectionTitle, { color: colors.text }]}>Nhược điểm:</Text>
 
                                 <Markdown
-                                    style={getMarkdownStyles()}
+                                    key={markdownKey}
+                                    style={markdownStyles}
                                     rules={{
                                         image: customImageRenderer,
                                     }}
@@ -494,12 +565,12 @@ export default function CVAnalysisScreen() {
         return (
             <View style={[styles.actionsContainer]}>
                 {/* Actions Card */}
-                <View style={[styles.card, { backgroundColor: Colors[colorScheme ?? "light"].background, borderColor: Colors[colorScheme ?? "light"].border }]}>
+                <View style={[styles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
                     <LinearGradient colors={["#3B82F6", "#2563EB"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardHeader}>
                         <Text style={styles.cardTitle}>Hành động</Text>
                     </LinearGradient>
 
-                    <View style={[styles.cardContent, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                    <View style={[styles.cardContent, { backgroundColor: colors.background }]}>
                         <View style={styles.section}>
                             <TouchableOpacity
                                 style={[styles.actionButton, { backgroundColor: pdfUrl ? "#6366F1" : "#9CA3AF" }]}
@@ -533,36 +604,50 @@ export default function CVAnalysisScreen() {
                 </View>
 
                 {/* Info Card */}
-                <View
-                    style={[
-                        styles.card,
-                        { backgroundColor: Colors[colorScheme ?? "light"].background, borderColor: Colors[colorScheme ?? "light"].border, marginTop: 16 },
-                    ]}
-                >
+                <View style={[styles.card, { backgroundColor: colors.background, borderColor: colors.border, marginTop: 16 }]}>
                     <LinearGradient colors={["#F59E0B", "#D97706"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardHeader}>
                         <Text style={styles.cardTitle}>Thông tin CV</Text>
                     </LinearGradient>
 
-                    <View style={[styles.cardContent, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                    <View style={[styles.cardContent, { backgroundColor: colors.background }]}>
                         <View style={styles.section}>
-                            <View style={styles.infoItem}>
+                            <View
+                                style={[
+                                    styles.infoItem,
+                                    {
+                                        backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.02)",
+                                    },
+                                ]}
+                            >
                                 <Ionicons name="calendar" size={16} color="#F59E0B" />
-                                <Text style={[styles.infoText, { color: Colors[colorScheme ?? "light"].text }]}>
-                                    Cập nhật: {formatToVNTime(userData?.updatedAt || "")}
-                                </Text>
+                                <Text style={[styles.infoText, { color: colors.text }]}>Cập nhật: {formatToVNTime(userData?.updatedAt || "")}</Text>
                             </View>
 
                             {profile?.Job_position && (
-                                <View style={styles.infoItem}>
+                                <View
+                                    style={[
+                                        styles.infoItem,
+                                        {
+                                            backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.02)",
+                                        },
+                                    ]}
+                                >
                                     <Ionicons name="briefcase" size={16} color="#F59E0B" />
-                                    <Text style={[styles.infoText, { color: Colors[colorScheme ?? "light"].text }]}>Vị trí: {profile.Job_position}</Text>
+                                    <Text style={[styles.infoText, { color: colors.text }]}>Vị trí: {profile.Job_position}</Text>
                                 </View>
                             )}
 
                             {profile?.Years_of_experience && (
-                                <View style={styles.infoItem}>
+                                <View
+                                    style={[
+                                        styles.infoItem,
+                                        {
+                                            backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.02)",
+                                        },
+                                    ]}
+                                >
                                     <Ionicons name="school" size={16} color="#F59E0B" />
-                                    <Text style={[styles.infoText, { color: Colors[colorScheme ?? "light"].text }]}>Kinh nghiệm: {profile.Years_of_experience}</Text>
+                                    <Text style={[styles.infoText, { color: colors.text }]}>Kinh nghiệm: {profile.Years_of_experience}</Text>
                                 </View>
                             )}
                         </View>
@@ -590,7 +675,15 @@ export default function CVAnalysisScreen() {
                     <Text style={styles.cardTitle}>Đề xuất chỉnh sửa CV</Text>
                 </LinearGradient>
 
-                <View style={[styles.suggestionContainer, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                <View
+                    style={[
+                        styles.suggestionContainer,
+                        {
+                            backgroundColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.01)",
+                            borderColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.06)",
+                        },
+                    ]}
+                >
                     <View style={styles.section}>
                         {/* Phần cần chỉnh sửa chi tiết */}
                         {content.canChinhSuaChiTiet && (
@@ -598,7 +691,8 @@ export default function CVAnalysisScreen() {
                                 <Text style={[styles.sectionTitle, { color: "#059669" }]}>Cần chỉnh sửa chi tiết:</Text>
 
                                 <Markdown
-                                    style={getMarkdownStyles()}
+                                    key={markdownKey}
+                                    style={markdownStyles}
                                     rules={{
                                         image: customImageRenderer,
                                     }}
@@ -610,11 +704,18 @@ export default function CVAnalysisScreen() {
 
                         {/* Phần cần thêm */}
                         {content.canThem && (
-                            <View style={[styles.subsection, styles.sectionWithBorder]}>
+                            <View
+                                style={[
+                                    styles.subsection,
+                                    styles.sectionWithBorder,
+                                    { borderTopColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.08)" },
+                                ]}
+                            >
                                 <Text style={[styles.sectionTitle, { color: "#2563EB" }]}>Cần thêm:</Text>
 
                                 <Markdown
-                                    style={getMarkdownStyles()}
+                                    key={markdownKey}
+                                    style={markdownStyles}
                                     rules={{
                                         image: customImageRenderer,
                                     }}
@@ -626,11 +727,18 @@ export default function CVAnalysisScreen() {
 
                         {/* Phần lưu ý */}
                         {content.luuY && (
-                            <View style={[styles.subsection, styles.sectionWithBorder]}>
+                            <View
+                                style={[
+                                    styles.subsection,
+                                    styles.sectionWithBorder,
+                                    { borderTopColor: colorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.08)" },
+                                ]}
+                            >
                                 <Text style={[styles.sectionTitle, { color: "#F59E0B" }]}>Lưu ý:</Text>
 
                                 <Markdown
-                                    style={getMarkdownStyles()}
+                                    key={markdownKey}
+                                    style={markdownStyles}
                                     rules={{
                                         image: customImageRenderer,
                                     }}
@@ -658,13 +766,14 @@ export default function CVAnalysisScreen() {
                   })
                 : userData.userData.recommend
             : null,
+        colorScheme,
     ]);
 
     // Memoize the CV info card to prevent unnecessary re-renders
     const memoizedCVInfoCard = useMemo(() => {
         console.log("🔄 Memoizing CV info card");
         return renderCVInfoCard();
-    }, [userData?.userData?.profile?.Job_position, userData?.userData?.profile?.Years_of_experience, userData?.userData?.PDF_CV_URL, userData?.updatedAt]);
+    }, [userData?.userData?.profile?.Job_position, userData?.userData?.profile?.Years_of_experience, userData?.userData?.PDF_CV_URL, userData?.updatedAt, colorScheme]);
 
     // Memoize the suggestions card to prevent unnecessary re-renders
     const memoizedSuggestionsCard = useMemo(() => {
@@ -680,6 +789,7 @@ export default function CVAnalysisScreen() {
                   })
                 : userData.userData.recommend
             : null,
+        colorScheme,
     ]);
 
     if (loading) {
@@ -985,8 +1095,6 @@ const styles = StyleSheet.create({
         padding: 14,
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: "rgba(0,0,0,0.06)",
-        backgroundColor: "rgba(0,0,0,0.01)",
     },
     loginPrompt: {
         flex: 1,
@@ -1234,8 +1342,6 @@ const styles = StyleSheet.create({
         padding: 14,
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: "rgba(0,0,0,0.06)",
-        backgroundColor: "rgba(0,0,0,0.01)",
     },
     actionsContainer: {
         gap: 16,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, ScrollView, TouchableOpacity, View, Alert, Dimensions, StatusBar, RefreshControl } from "react-native";
+import { StyleSheet, ScrollView, TouchableOpacity, View, Alert, Dimensions, StatusBar, RefreshControl, ActivityIndicator } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -31,6 +31,10 @@ interface Achievement {
 }
 
 export default function ProfileScreen() {
+    // Authentication guard - moved to top of component
+    const { user, loading, isAuthenticated } = useAuthGuard();
+    const { signOut } = useAuth();
+
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? "light"];
     const insets = useSafeAreaInsets();
@@ -41,15 +45,6 @@ export default function ProfileScreen() {
         savedJobs: 0,
     });
     const [refreshing, setRefreshing] = useState(false);
-
-    // Authentication guard
-    const { user, loading, isAuthenticated } = useAuthGuard();
-    const { signOut } = useAuth();
-
-    // Show loading if still checking auth
-    if (loading || !isAuthenticated) {
-        return <ThemedView style={styles.container} />;
-    }
 
     // Fetch user statistics
     const fetchUserStats = async () => {
@@ -85,8 +80,10 @@ export default function ProfileScreen() {
     };
 
     useEffect(() => {
-        fetchUserStats();
-    }, [user?.uid]);
+        if (isAuthenticated && user?.uid) {
+            fetchUserStats();
+        }
+    }, [isAuthenticated, user?.uid]);
 
     const profileCompleteness = 75;
 
@@ -202,6 +199,25 @@ export default function ProfileScreen() {
             {showArrow && <IconSymbol name="chevron.right" size={16} color={colors.icon} />}
         </TouchableOpacity>
     );
+
+    // Show loading if still checking auth
+    if (loading) {
+        return (
+            <ThemedView style={{ backgroundColor: "#fff", flex: 1 }}>
+                <ActivityIndicator size="large" />
+            </ThemedView>
+        );
+    }
+
+    // If not authenticated, the useAuthGuard hook will handle redirection
+    // We still render something here to avoid hooks error
+    if (!isAuthenticated) {
+        return (
+            <ThemedView style={{ backgroundColor: "#fff", flex: 1 }}>
+                <ActivityIndicator size="large" />
+            </ThemedView>
+        );
+    }
 
     return (
         <ThemedView style={[styles.container, { backgroundColor: colors.background }]}>
