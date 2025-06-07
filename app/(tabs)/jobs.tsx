@@ -369,6 +369,39 @@ export default function JobsScreen() {
             } catch (primaryError) {
                 console.warn("❌ Hybrid endpoint failed, trying fallback...", primaryError);
 
+                // Check if primary error is about missing CV data
+                const primaryErrorMessage = primaryError instanceof Error ? primaryError.message : String(primaryError);
+                if (primaryErrorMessage.includes("Thiếu dữ liệu tổng quan")) {
+                    // Show alert for missing CV data
+                    Alert.alert(
+                        "Thiếu thông tin cá nhân",
+                        "Bạn cần cập nhật thông tin cá nhân trong hồ sơ để nhận được gợi ý việc làm phù hợp.",
+                        [
+                            {
+                                text: "Cập nhật ngay",
+                                onPress: () => router.push("/(tabs)/profile"),
+                                style: "default",
+                            },
+                            {
+                                text: "Để sau",
+                                style: "cancel",
+                            },
+                        ],
+                        { cancelable: true }
+                    );
+
+                    // Set empty state for recommended jobs
+                    if (reset) {
+                        setRecommendedJobs([]);
+                        setRecommendedCurrentPage(1);
+                    }
+                    setRecommendedTotalPages(1);
+                    setRecommendedHasMorePages(false);
+                    setRecommendedTotalJobs(0);
+                    setRecommendedSearchInfo(null);
+                    return;
+                }
+
                 try {
                     // 🗝️ FALLBACK: Use regular search endpoint (like Recommend.jsx)
                     const fallbackResponse = await apiService.fallbackSearchJobs({
@@ -408,12 +441,59 @@ export default function JobsScreen() {
                         primary: primaryError,
                         fallback: fallbackError,
                     });
-                    throw new Error("Không thể tải dữ liệu công việc");
+
+                    // Check if fallback error is also about missing CV data
+                    const fallbackErrorMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+                    if (fallbackErrorMessage.includes("Thiếu dữ liệu tổng quan")) {
+                        // Show alert for missing CV data
+                        Alert.alert(
+                            "Thiếu thông tin cá nhân",
+                            "Bạn cần cập nhật thông tin cá nhân trong hồ sơ để nhận được gợi ý việc làm phù hợp.",
+                            [
+                                {
+                                    text: "Cập nhật ngay",
+                                    onPress: () => router.push("/(tabs)/profile"),
+                                    style: "default",
+                                },
+                                {
+                                    text: "Để sau",
+                                    style: "cancel",
+                                },
+                            ],
+                            { cancelable: true }
+                        );
+
+                        // Set empty state for recommended jobs
+                        if (reset) {
+                            setRecommendedJobs([]);
+                            setRecommendedCurrentPage(1);
+                        }
+                        setRecommendedTotalPages(1);
+                        setRecommendedHasMorePages(false);
+                        setRecommendedTotalJobs(0);
+                        setRecommendedSearchInfo(null);
+                        return;
+                    }
+
+                    // Both endpoints failed - set graceful error state instead of throwing
+                    console.warn("⚠️ Both hybrid and fallback endpoints failed, setting empty state");
+
+                    if (reset) {
+                        setRecommendedJobs([]);
+                        setRecommendedCurrentPage(1);
+                    }
+                    setRecommendedTotalPages(1);
+                    setRecommendedHasMorePages(false);
+                    setRecommendedTotalJobs(0);
+                    setRecommendedSearchInfo(null);
+                    setRecommendedError("Không thể tải danh sách việc làm phù hợp. Vui lòng thử lại.");
+                    return;
                 }
             }
         } catch (err) {
-            console.error("❌ Error fetching recommended jobs:", err);
-            setRecommendedError("Không thể tải danh sách việc làm phù hợp. Vui lòng thử lại.");
+            // Global catch - should not normally reach here due to improved error handling above
+            console.error("❌ Unexpected error in fetchRecommendedJobs:", err);
+            setRecommendedError("Có lỗi không mong đợi xảy ra. Vui lòng thử lại.");
             if (reset) {
                 setRecommendedJobs([]);
             }

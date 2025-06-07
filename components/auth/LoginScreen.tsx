@@ -178,19 +178,19 @@ export const LoginScreen: React.FC = () => {
                         )}
 
                         <Button title={isRegister ? "Đăng ký" : "Đăng nhập"} onPress={handleSubmit(onSubmit)} loading={loading} style={styles.submitButton} />
-
+                        {/* 
                         <View style={styles.divider}>
                             <View style={styles.dividerLine} />
                             <Text style={styles.dividerText}>Hoặc</Text>
                             <View style={styles.dividerLine} />
-                        </View>
+                        </View> */}
 
-                        <Button
+                        {/* <Button
                             title="Đăng nhập với Google"
                             onPress={() => Alert.alert("Thông báo", "Tính năng đăng nhập Google sẽ có trong bản cập nhật tiếp theo")}
                             variant="outline"
                             disabled={loading}
-                        />
+                        /> */}
 
                         <View style={styles.footer}>
                             <Text style={styles.footerText}>{isRegister ? "Bạn đã có tài khoản?" : "Bạn chưa có tài khoản?"}</Text>

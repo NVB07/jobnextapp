@@ -35,6 +35,7 @@ export default function SavedJobsScreen() {
         data: [],
         pagination: { currentPage: 1, perPage: 10, totalPages: 1, totalJobs: 0 },
     });
+    const [expiredJobsCount, setExpiredJobsCount] = useState(0);
     const [currentPage, setCurrentPage] = useState(1);
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -62,6 +63,16 @@ export default function SavedJobsScreen() {
             const response = await apiService.getSavedJobs(user.uid, page, 10, forceRefresh);
             setSavedJobs(response);
             setCurrentPage(page);
+
+            // Calculate expired jobs count only for the first page
+            if (page === 1) {
+                const totalSavedJobIds = response.pagination.totalJobs;
+                // Get total count of actual jobs across all pages
+                const allJobsResponse = await apiService.getSavedJobs(user.uid, 1, 1000, forceRefresh);
+                const actualJobsCount = allJobsResponse.data.length;
+                const expiredCount = Math.max(0, totalSavedJobIds - actualJobsCount);
+                setExpiredJobsCount(expiredCount);
+            }
         } catch (error) {
             console.error("Error fetching saved jobs:", error);
             Alert.alert("Lỗi", "Không thể tải danh sách công việc đã lưu");
@@ -113,6 +124,8 @@ export default function SavedJobsScreen() {
         if (user?.uid) {
             listsCache.clearUserCache(user.uid);
         }
+        // Reset expired jobs count
+        setExpiredJobsCount(0);
         await fetchSavedJobs(1, true);
         setRefreshing(false);
     };
@@ -137,12 +150,15 @@ export default function SavedJobsScreen() {
 
                 <View style={styles.headerTextContainer}>
                     <ThemedText style={styles.headerTitle}>Công việc đã lưu</ThemedText>
-                    <ThemedText style={styles.headerSubtitle}>{savedJobs.pagination.totalJobs} công việc</ThemedText>
+                    <ThemedText style={styles.headerSubtitle}>
+                        {savedJobs.data.length} công việc
+                        {expiredJobsCount > 0 && ` • ${expiredJobsCount} đã hết hạn`}
+                    </ThemedText>
                 </View>
 
-                <TouchableOpacity style={styles.searchButton} activeOpacity={0.7}>
+                {/* <TouchableOpacity style={styles.searchButton} activeOpacity={0.7}>
                     <IconSymbol name="magnifyingglass" size={20} color="white" />
-                </TouchableOpacity>
+                </TouchableOpacity> */}
             </View>
         </LinearGradient>
     );
@@ -212,8 +228,12 @@ export default function SavedJobsScreen() {
     const renderEmptyState = () => (
         <View style={styles.emptyState}>
             <IconSymbol name="bookmark" size={80} color={colors.icon} />
-            <ThemedText style={[styles.emptyTitle, { color: colors.text }]}>Chưa có công việc nào được lưu</ThemedText>
-            <ThemedText style={[styles.emptySubtitle, { color: colors.icon }]}>Hãy lưu những công việc yêu thích để xem lại sau</ThemedText>
+            <ThemedText style={[styles.emptyTitle, { color: colors.text }]}>
+                {expiredJobsCount > 0 ? "Không có công việc nào còn hiệu lực" : "Chưa có công việc nào được lưu"}
+            </ThemedText>
+            <ThemedText style={[styles.emptySubtitle, { color: colors.icon }]}>
+                {expiredJobsCount > 0 ? `Bạn đã có ${expiredJobsCount} công việc đã hết hạn bị xóa khỏi hệ thống.` : "Hãy lưu những công việc yêu thích để xem lại sau"}
+            </ThemedText>
 
             <TouchableOpacity style={[styles.browseButton, { backgroundColor: colors.tint }]} onPress={() => router.push("/(tabs)/jobs")} activeOpacity={0.8}>
                 <IconSymbol name="magnifyingglass" size={16} color="white" />

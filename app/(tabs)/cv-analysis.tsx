@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Markdown from "react-native-markdown-display";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
@@ -397,6 +398,16 @@ export default function CVAnalysisScreen() {
         }
     }, [user]);
 
+    // Auto refresh when screen comes into focus (e.g., when returning from profile screen after CV upload or profile update)
+    useFocusEffect(
+        React.useCallback(() => {
+            if (user?.uid) {
+                console.log("CV Analysis screen focused - refreshing data");
+                refreshData();
+            }
+        }, [user?.uid])
+    );
+
     const renderHeader = () => (
         <LinearGradient colors={colors.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.header, { paddingTop: insets.top }]}>
             <Text style={[styles.headerTitle]}> Phân tích CV</Text>
@@ -580,7 +591,7 @@ export default function CVAnalysisScreen() {
                             <TouchableOpacity
                                 style={[styles.actionButton, { backgroundColor: "#8B5CF6", marginTop: 10 }]}
                                 onPress={() => {
-                                    Alert.alert("Tính năng đang phát triển", "Tính năng tạo CV mới sẽ sớm có mặt!");
+                                    router.push("/(tabs)/profile");
                                 }}
                             >
                                 <Ionicons name="create" size={18} color="white" />
@@ -818,22 +829,46 @@ export default function CVAnalysisScreen() {
                 {renderHeader()}
 
                 <View style={styles.noDataContainer}>
-                    <Ionicons name="document-outline" size={80} color="#9CA3AF" />
-                    <Text style={[styles.noDataTitle, { color: Colors[colorScheme ?? "light"].text }]}>Chưa có CV được phân tích</Text>
+                    <Ionicons name="person-circle-outline" size={80} color="#9CA3AF" />
+                    <Text style={[styles.noDataTitle, { color: Colors[colorScheme ?? "light"].text }]}>Chưa có thông tin cá nhân</Text>
                     <Text style={[styles.noDataSubtitle, { color: Colors[colorScheme ?? "light"].text }]}>
-                        Vui lòng tải lên CV để hệ thống có thể phân tích và đưa ra gợi ý cải thiện
+                        Để sử dụng tính năng phân tích CV, bạn cần cập nhật thông tin cá nhân trong phần hồ sơ. Hệ thống sẽ phân tích và đưa ra gợi ý cải thiện CV dựa
+                        trên thông tin của bạn.
                     </Text>
 
-                    {/* Debug info */}
+                    <View style={styles.instructionContainer}>
+                        <View style={styles.instructionStep}>
+                            <View style={[styles.stepNumber, { backgroundColor: Colors[colorScheme ?? "light"].tint }]}>
+                                <Text style={styles.stepNumberText}>1</Text>
+                            </View>
+                            <Text style={[styles.instructionText, { color: Colors[colorScheme ?? "light"].text }]}>
+                                Truy cập trang <Text style={{ fontWeight: "bold", color: Colors[colorScheme ?? "light"].tint }}>Hồ sơ</Text>
+                            </Text>
+                        </View>
+
+                        <View style={styles.instructionStep}>
+                            <View style={[styles.stepNumber, { backgroundColor: Colors[colorScheme ?? "light"].tint }]}>
+                                <Text style={styles.stepNumberText}>2</Text>
+                            </View>
+                            <Text style={[styles.instructionText, { color: Colors[colorScheme ?? "light"].text }]}>Cập nhật đầy đủ thông tin cá nhân và kỹ năng</Text>
+                        </View>
+
+                        <View style={styles.instructionStep}>
+                            <View style={[styles.stepNumber, { backgroundColor: Colors[colorScheme ?? "light"].tint }]}>
+                                <Text style={styles.stepNumberText}>3</Text>
+                            </View>
+                            <Text style={[styles.instructionText, { color: Colors[colorScheme ?? "light"].text }]}>
+                                Hệ thống sẽ tự động phân tích và tạo báo cáo chi tiết
+                            </Text>
+                        </View>
+                    </View>
 
                     <TouchableOpacity
                         style={[styles.uploadButton, { backgroundColor: Colors[colorScheme ?? "light"].tint }]}
-                        onPress={() => {
-                            Alert.alert("Tính năng đang phát triển", "Tính năng tải CV sẽ sớm có mặt!");
-                        }}
+                        onPress={() => router.push("/(tabs)/profile")}
                     >
-                        <Ionicons name="cloud-upload" size={20} color="white" />
-                        <Text style={styles.uploadButtonText}>Tạo CV mới</Text>
+                        <Ionicons name="person" size={20} color="white" />
+                        <Text style={styles.uploadButtonText}>Cập nhật hồ sơ</Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -1128,7 +1163,6 @@ const styles = StyleSheet.create({
     },
     noDataContainer: {
         flex: 1,
-        justifyContent: "center",
         alignItems: "center",
         padding: 32,
         gap: 20,
@@ -1152,7 +1186,7 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderRadius: 10,
         gap: 8,
-        marginTop: 16,
+        marginTop: 0,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.12,
@@ -1351,5 +1385,33 @@ const styles = StyleSheet.create({
     markdownText: {
         fontSize: 14,
         lineHeight: 22,
+    },
+    instructionContainer: {
+        width: "100%",
+        marginVertical: 20,
+        gap: 16,
+        paddingHorizontal: 16,
+    },
+    instructionStep: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+    },
+    stepNumber: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    stepNumberText: {
+        color: "white",
+        fontSize: 14,
+        fontWeight: "bold",
+    },
+    instructionText: {
+        flex: 1,
+        fontSize: 14,
+        lineHeight: 20,
     },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
     StyleSheet,
     ScrollView,
@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { auth } from "../../config/firebase";
 import * as DocumentPicker from "expo-document-picker";
 import ENV from "../../config/env";
@@ -27,13 +28,14 @@ import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useAuth } from "../../contexts/AuthContext";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
-import { apiService, listsCache } from "../../services/api";
+import { apiService, listsCache, UserData } from "../../services/api";
 
 const { width } = Dimensions.get("window");
 
 interface UserStats {
     interviews: number;
     savedJobs: number;
+    expiredJobs: number;
 }
 
 interface Achievement {
@@ -58,6 +60,7 @@ export default function ProfileScreen() {
     const [userStats, setUserStats] = useState<UserStats>({
         interviews: 0,
         savedJobs: 0,
+        expiredJobs: 0,
     });
     const [refreshing, setRefreshing] = useState(false);
     const [editModalVisible, setEditModalVisible] = useState(false);
@@ -70,6 +73,7 @@ export default function ProfileScreen() {
     const [uploadComplete, setUploadComplete] = useState(false);
     const [uploadSuccess, setUploadSuccess] = useState(true);
     const toastId = useRef<string | null>(null);
+    const [userCVData, setUserCVData] = useState<UserData | null>(null);
 
     // Fetch user statistics
     const fetchUserStats = async () => {
@@ -80,15 +84,36 @@ export default function ProfileScreen() {
             const currentUser = auth.currentUser;
             const token = currentUser ? await currentUser.getIdToken() : "";
 
-            // Fetch both counts in parallel
-            const [savedJobsResult, interviewsResult] = await Promise.all([apiService.getSavedJobsCount(user.uid), apiService.getInterviewsCount(user.uid, token)]);
+            // Fetch both data in parallel
+            const [savedJobsResult, interviewsResult] = await Promise.all([
+                apiService.getSavedJobs(user.uid, 1, 1000), // Get large page to get all jobs for calculation
+                apiService.getInterviewsCount(user.uid, token),
+            ]);
+
+            const totalSavedJobIds = savedJobsResult.pagination.totalJobs; // Total job IDs saved (including expired)
+            const actualJobsCount = savedJobsResult.data.length; // Actual jobs that still exist in DB
+            const expiredJobsCount = Math.max(0, totalSavedJobIds - actualJobsCount);
 
             setUserStats({
-                savedJobs: savedJobsResult.count,
+                savedJobs: actualJobsCount,
                 interviews: interviewsResult.count,
+                expiredJobs: expiredJobsCount,
             });
         } catch (error) {
             console.error("Error fetching user stats:", error);
+            // Keep default values on error
+        }
+    };
+
+    // Fetch user CV data
+    const fetchUserCVData = async () => {
+        if (!user?.uid) return;
+
+        try {
+            const data = await apiService.getUserData(user.uid);
+            setUserCVData(data);
+        } catch (error) {
+            console.error("Error fetching user CV data:", error);
             // Keep default values on error
         }
     };
@@ -100,15 +125,32 @@ export default function ProfileScreen() {
         if (user?.uid) {
             listsCache.clearUserCache(user.uid);
         }
-        await fetchUserStats();
+        await Promise.all([fetchUserStats(), fetchUserCVData()]);
         setRefreshing(false);
     };
 
     useEffect(() => {
         if (isAuthenticated && user?.uid) {
             fetchUserStats();
+            fetchUserCVData();
         }
     }, [isAuthenticated, user?.uid]);
+
+    // Auto refresh when screen comes into focus (e.g., when returning from saved-jobs, interviews, or profile-form)
+    useFocusEffect(
+        useCallback(() => {
+            if (isAuthenticated && user?.uid) {
+                console.log("Profile screen focused - refreshing all data");
+
+                // Clear cache to ensure fresh data after potential profile updates
+                listsCache.clearUserCache(user.uid);
+
+                // Reload all profile-related data
+                fetchUserStats();
+                fetchUserCVData();
+            }
+        }, [isAuthenticated, user?.uid])
+    );
 
     const profileCompleteness = 75;
 
@@ -167,8 +209,8 @@ export default function ProfileScreen() {
     const handleEditOption = (option: string) => {
         setEditModalVisible(false);
         if (option === "form") {
-            // Navigate to form edit screen
-            Alert.alert("Chỉnh sửa", "Chuyển đến form nhập thông tin");
+            // Navigate to profile form screen
+            router.push("/profile-form");
         } else if (option === "cv") {
             // Show CV upload modal
             setCvUploadModalVisible(true);
@@ -249,8 +291,15 @@ export default function ProfileScreen() {
                     setSelectedFile(null);
                     setIsUploading(false);
 
-                    // Reload user stats
+                    // Clear cache after CV upload to ensure fresh data
+                    if (user?.uid) {
+                        listsCache.clearUserCache(user.uid);
+                        console.log("🔄 CV uploaded successfully - clearing cache and reloading data");
+                    }
+
+                    // Reload all user-related data
                     fetchUserStats();
+                    fetchUserCVData();
                 },
 
                 // Handle errors
@@ -271,7 +320,21 @@ export default function ProfileScreen() {
         }
     };
 
-    const StatCard = ({ title, value, icon, gradient, onPress }: { title: string; value: number; icon: string; gradient: [string, string]; onPress?: () => void }) => (
+    const StatCard = ({
+        title,
+        value,
+        icon,
+        gradient,
+        onPress,
+        subtitle,
+    }: {
+        title: string;
+        value: number;
+        icon: string;
+        gradient: [string, string];
+        onPress?: () => void;
+        subtitle?: string;
+    }) => (
         <TouchableOpacity style={[styles.statCard, { backgroundColor: colors.cardBackground }]} onPress={onPress} activeOpacity={onPress ? 0.8 : 1}>
             <LinearGradient colors={gradient} style={styles.statIcon}>
                 <IconSymbol name={icon as any} size={20} color="white" />
@@ -280,6 +343,7 @@ export default function ProfileScreen() {
             <View style={styles.statInfo}>
                 <ThemedText style={[styles.statValue, { color: colors.text }]}>{value}</ThemedText>
                 <ThemedText style={[styles.statTitle, { color: colors.icon }]}>{title}</ThemedText>
+                {subtitle && <ThemedText style={[styles.statSubtitle, { color: colors.icon }]}>{subtitle}</ThemedText>}
             </View>
 
             {onPress && (
@@ -365,15 +429,15 @@ export default function ProfileScreen() {
                     </LinearGradient>
 
                     <View style={styles.userInfo}>
-                        <ThemedText style={styles.userName}>{user?.displayName || user?.email || "Người dùng"}</ThemedText>
-                        <ThemedText style={styles.userTitle}>React Native Developer</ThemedText>
-                        <ThemedText style={styles.userLocation}>Hồ Chí Minh, Việt Nam</ThemedText>
+                        <ThemedText style={styles.userName}>{userCVData?.userData?.profile?.Name || user?.displayName || user?.email || "Người dùng"}</ThemedText>
+                        {userCVData?.userData?.profile?.Job_position && <ThemedText style={styles.userTitle}>{userCVData.userData.profile.Job_position}</ThemedText>}
+                        {userCVData?.userData?.profile?.Address && <ThemedText style={styles.userLocation}>{userCVData.userData.profile.Address}</ThemedText>}
                     </View>
                 </View>
 
                 <TouchableOpacity style={styles.editButton} onPress={handleEditPress}>
                     <IconSymbol name="pencil" size={16} color="white" />
-                    <ThemedText style={styles.editButtonText}>Chỉnh sửa</ThemedText>
+                    <ThemedText style={styles.editButtonText}>Chỉnh sửa - Cập nhật</ThemedText>
                 </TouchableOpacity>
             </LinearGradient>
 
@@ -477,7 +541,7 @@ export default function ProfileScreen() {
             <ScrollView
                 style={styles.content}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: insets.bottom + 40 }}
+                contentContainerStyle={{ paddingBottom: 0 }}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
@@ -536,25 +600,19 @@ export default function ProfileScreen() {
                     </View>
                 )}
 
-                {/* Profile Completeness */}
-                <View style={styles.completenessSection}>
-                    <View style={[styles.completenessCard, { backgroundColor: colors.cardBackground }]}>
-                        <View style={styles.completenessHeader}>
-                            <ThemedText style={[styles.completenessTitle, { color: colors.text }]}>Hoàn thiện hồ sơ</ThemedText>
-                            <ThemedText style={[styles.completenessPercent, { color: colors.tint }]}>{profileCompleteness}%</ThemedText>
+                {/* Skills Section */}
+                {userCVData?.userData?.profile?.Skills && (
+                    <View style={styles.skillsSection}>
+                        <View style={[styles.skillsCard, { backgroundColor: colors.cardBackground }]}>
+                            <ThemedText style={[styles.skillsTitle, { color: colors.text }]}>Kỹ năng</ThemedText>
+                            <ThemedText style={[styles.skillsContent, { color: colors.icon }]}>{userCVData.userData.profile.Skills}</ThemedText>
                         </View>
-
-                        <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                            <LinearGradient colors={colors.gradient} style={[styles.progressFill, { width: `${profileCompleteness}%` }]} />
-                        </View>
-
-                        <ThemedText style={[styles.completenessHint, { color: colors.icon }]}>Hoàn thiện thêm 25% để tăng cơ hội được tuyển dụng</ThemedText>
                     </View>
-                </View>
+                )}
 
                 {/* Statistics */}
                 <View style={styles.statsSection}>
-                    <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Thống kê hoạt động</ThemedText>
+                    <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Hoạt động</ThemedText>
 
                     <View style={styles.statsGrid}>
                         <StatCard
@@ -570,42 +628,33 @@ export default function ProfileScreen() {
                             icon="bookmark.fill"
                             gradient={["#f59e0b", "#fbbf24"] as [string, string]}
                             onPress={() => router.push("/saved-jobs")}
+                            subtitle={userStats.expiredJobs > 0 ? `${userStats.expiredJobs} đã hết hạn` : undefined}
                         />
                     </View>
                 </View>
 
-                {/* Achievements */}
-                <View style={styles.achievementsSection}>
-                    <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Thành tích</ThemedText>
-
-                    {achievements.map((achievement) => (
-                        <AchievementCard key={achievement.id} achievement={achievement} />
-                    ))}
-                </View>
-
-                {/* Settings */}
+                {/* Information */}
                 <View style={styles.settingsSection}>
-                    <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Cài đặt</ThemedText>
+                    <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>Thông tin</ThemedText>
 
                     <View style={styles.settingsGroup}>
-                        <SettingItem title="Thông báo" subtitle="Quản lý thông báo ứng dụng" icon="bell.fill" onPress={() => handleSettingsPress("Thông báo")} />
                         <SettingItem
-                            title="Quyền riêng tư"
-                            subtitle="Cài đặt bảo mật và quyền riêng tư"
-                            icon="lock.fill"
-                            onPress={() => handleSettingsPress("Quyền riêng tư")}
+                            title="Điều khoản sử dụng"
+                            subtitle="Các điều khoản và điều kiện sử dụng"
+                            icon="doc.text.fill"
+                            onPress={() => router.push("/terms")}
                         />
                         <SettingItem
-                            title="Tài khoản"
-                            subtitle="Quản lý thông tin tài khoản"
-                            icon="person.circle.fill"
-                            onPress={() => handleSettingsPress("Tài khoản")}
+                            title="Chính sách bảo mật"
+                            subtitle="Chính sách bảo vệ thông tin cá nhân"
+                            icon="lock.doc.fill"
+                            onPress={() => router.push("/privacy")}
                         />
                         <SettingItem
-                            title="Hỗ trợ"
-                            subtitle="Trung tâm hỗ trợ và phản hồi"
-                            icon="questionmark.circle.fill"
-                            onPress={() => handleSettingsPress("Hỗ trợ")}
+                            title="Thông tin ứng dụng"
+                            subtitle="Phiên bản và thông tin chi tiết"
+                            icon="info.circle.fill"
+                            onPress={() => router.push("/about")}
                         />
                     </View>
 
@@ -677,31 +726,26 @@ const styles = StyleSheet.create({
         fontWeight: "600",
         color: "white",
     },
-    completenessSection: {
+    skillsSection: {
         padding: 24,
     },
-    completenessCard: {
+    skillsCard: {
         padding: 20,
         borderRadius: 16,
-        gap: 16,
+        gap: 12,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 12,
         elevation: 6,
     },
-    completenessHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-    },
-    completenessTitle: {
+    skillsTitle: {
         fontSize: 18,
         fontWeight: "bold",
     },
-    completenessPercent: {
-        fontSize: 18,
-        fontWeight: "bold",
+    skillsContent: {
+        fontSize: 14,
+        lineHeight: 20,
     },
     progressBar: {
         height: 8,
@@ -712,26 +756,21 @@ const styles = StyleSheet.create({
         height: "100%",
         borderRadius: 4,
     },
-    completenessHint: {
-        fontSize: 12,
-        lineHeight: 16,
-    },
     statsSection: {
         paddingHorizontal: 24,
         marginBottom: 24,
         gap: 16,
     },
     sectionTitle: {
+        marginTop: 16,
         fontSize: 20,
         fontWeight: "bold",
     },
     statsGrid: {
-        flexDirection: "row",
         flexWrap: "wrap",
         gap: 12,
     },
     statCard: {
-        width: (width - 60) / 2,
         padding: 16,
         borderRadius: 16,
         flexDirection: "row",
@@ -765,6 +804,10 @@ const styles = StyleSheet.create({
         marginLeft: 8,
         alignItems: "center",
         justifyContent: "center",
+    },
+    statSubtitle: {
+        fontSize: 12,
+        marginTop: 2,
     },
     achievementsSection: {
         paddingHorizontal: 24,

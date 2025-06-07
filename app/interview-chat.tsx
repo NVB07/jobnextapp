@@ -405,7 +405,7 @@ export default function InterviewChatScreen() {
             if (forceNew && existingInterviewId) {
                 console.log(`🗑️ Deleting existing interview: ${existingInterviewId}`);
                 try {
-                    await interviewService.deleteInterview(existingInterviewId, token);
+                    await interviewService.deleteInterview(existingInterviewId, token, user?.uid);
                     console.log(`✅ Successfully deleted existing interview`);
                 } catch (deleteError) {
                     console.warn(`⚠️ Failed to delete existing interview:`, deleteError);
@@ -563,34 +563,7 @@ export default function InterviewChatScreen() {
                                         setShowInfoModal(true);
                                     },
                                 },
-                                interviewData.jobId || interviewDetails?.jobId
-                                    ? {
-                                          text: "Xem công việc",
-                                          onPress: () => {
-                                              router.push({
-                                                  pathname: "/job-detail",
-                                                  params: {
-                                                      jobId: interviewData.jobId || interviewDetails?.jobId,
-                                                      jobData: JSON.stringify({
-                                                          _id: interviewData.jobId || interviewDetails?.jobId,
-                                                          title: interviewData.jobTitle || interviewDetails?.jobTitle,
-                                                          company: interviewData.company || interviewDetails?.company,
-                                                          jobRequirement: interviewData.jobRequirements || interviewDetails?.jobRequirement,
-                                                          jobSource: interviewData.jobSource || interviewDetails?.jobSource,
-                                                          url:
-                                                              interviewData.jobId || interviewDetails?.jobId
-                                                                  ? `https://jobnext-rosy.vercel.app/jobs/${interviewData.jobId || interviewDetails?.jobId}`
-                                                                  : undefined,
-                                                          skills: interviewData.skills || interviewDetails?.skills,
-                                                          category: interviewData.category || interviewDetails?.category,
-                                                      }),
-                                                      canLoadDetails: "false",
-                                                      fromInterview: "true",
-                                                  },
-                                              });
-                                          },
-                                      }
-                                    : { text: "Xem công việc", style: "default" },
+
                                 {
                                     text: "Phỏng vấn lại",
                                     style: "destructive",

@@ -854,6 +854,21 @@ class ApiService {
         }
     }
 
+    async updateUserProfile(uid: string, data: { profile: UserProfile }): Promise<{ success: boolean; message?: string }> {
+        try {
+            console.log(`📝 Updating user profile for uid: ${uid}`);
+            const response = await this.request<{ success: boolean; message?: string }>(`users/${uid}`, {
+                method: "PATCH",
+                body: JSON.stringify(data),
+            });
+
+            return response;
+        } catch (error) {
+            console.error(`❌ Failed to update user profile for uid: ${uid}`, error);
+            return { success: false, message: "Lỗi khi cập nhật thông tin" };
+        }
+    }
+
     // Health check
     async ping(): Promise<string> {
         try {
@@ -1479,7 +1494,7 @@ class InterviewService {
         }
     }
 
-    async deleteInterview(interviewId: string, token: string): Promise<{ success: boolean; message?: string }> {
+    async deleteInterview(interviewId: string, token: string, uid?: string): Promise<{ success: boolean; message?: string }> {
         try {
             const response = await fetch(`${this.baseUrl}/interviews/deleteInterview/${interviewId}`, {
                 method: "DELETE",
@@ -1497,7 +1512,13 @@ class InterviewService {
 
             // Invalidate interviews cache after successful deletion
             if (result.success) {
-                listsCache.clearTypeCache("interviews");
+                if (uid) {
+                    // Clear cache for specific user only
+                    listsCache.invalidateUserListsCache(uid, "interviews");
+                } else {
+                    // Fallback to clearing all interviews cache
+                    listsCache.clearTypeCache("interviews");
+                }
             }
 
             return result;
@@ -1679,8 +1700,3 @@ class InterviewService {
 }
 
 export const interviewService = new InterviewService();
-
-// Create a debug service to get cache stats
-class DebugService {
-    // Implementation of DebugService methods
-}

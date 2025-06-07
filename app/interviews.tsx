@@ -143,7 +143,7 @@ export default function InterviewsScreen() {
                         try {
                             setDeleting(true);
                             // Call delete API
-                            const result = await interviewService.deleteInterview(interviewId, token);
+                            const result = await interviewService.deleteInterview(interviewId, token, user?.uid);
 
                             if (result.success) {
                                 // Remove interview from the list
@@ -244,15 +244,19 @@ export default function InterviewsScreen() {
                                 .split(",")
                                 .slice(0, 3)
                                 .map((skill: string, index: number) => {
-                                    const gradientColors = [
-                                        ["#6366f1", "#8b5cf6"],
-                                        ["#10b981", "#34d399"],
-                                        ["#f59e0b", "#fbbf24"],
-                                    ];
-
                                     return (
-                                        <View key={index} style={[styles.skillTag, { backgroundColor: colors.border }]}>
-                                            <ThemedText style={styles.skillText}>{skill.trim()}</ThemedText>
+                                        <View
+                                            key={index}
+                                            style={[
+                                                styles.skillTag,
+                                                {
+                                                    backgroundColor: colors.cardBackground,
+                                                    borderWidth: 1,
+                                                    borderColor: colors.border,
+                                                },
+                                            ]}
+                                        >
+                                            <ThemedText style={[styles.skillText, { color: colors.text }]}>{skill.trim()}</ThemedText>
                                         </View>
                                     );
                                 })}
@@ -262,22 +266,25 @@ export default function InterviewsScreen() {
 
                 {/* Status */}
                 <View style={styles.statusContainer}>
-                    {/* <ThemedText style={[styles.statusLabel, { color: colors.text }]}>Trạng thái:</ThemedText> */}
+                    <ThemedText style={[styles.statusLabel, { color: colors.text }]}>Trạng thái:</ThemedText>
                     <View style={styles.statusValue}>
                         {!score.state && score.pass === null && (
                             <View style={[styles.statusBadge, { backgroundColor: "#ff4757" }]}>
+                                <IconSymbol name="xmark.circle.fill" size={12} color="white" />
                                 <ThemedText style={styles.statusText}>Phỏng vấn bị hủy</ThemedText>
                             </View>
                         )}
 
                         {!score.state && score.pass !== null && (
                             <View style={[styles.statusBadge, { backgroundColor: "#2ed573" }]}>
+                                <IconSymbol name="checkmark.circle.fill" size={12} color="white" />
                                 <ThemedText style={styles.statusText}>Hoàn thành</ThemedText>
                             </View>
                         )}
 
                         {score.state && score.pass === null && (
                             <View style={[styles.statusBadge, { backgroundColor: "#ffa502" }]}>
+                                <IconSymbol name="clock.fill" size={12} color="white" />
                                 <ThemedText style={styles.statusText}>Chưa hoàn thành</ThemedText>
                             </View>
                         )}
@@ -480,13 +487,12 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     skillTag: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 8,
     },
     skillText: {
         fontSize: 12,
-        color: "white",
         fontWeight: "500",
     },
     statusContainer: {
@@ -501,9 +507,12 @@ const styles = StyleSheet.create({
     },
     statusValue: {},
     statusBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 12,
     },
     statusText: {
         fontSize: 12,
