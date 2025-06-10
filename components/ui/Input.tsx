@@ -27,6 +27,10 @@ export const Input: React.FC<InputProps> = ({ label, error, containerStyle, inpu
                     textInputProps.onBlur?.(e);
                 }}
                 placeholderTextColor="#8E8E93"
+                autoCorrect={false}
+                autoCapitalize="none"
+                autoComplete="off"
+                textContentType="none"
                 {...textInputProps}
             />
             {error && <Text style={[styles.error, errorStyle]}>{error}</Text>}

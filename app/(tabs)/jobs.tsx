@@ -1061,6 +1061,7 @@ export default function JobsScreen() {
                                 returnKeyType="search"
                                 autoFocus={false}
                                 editable={true}
+                                autoComplete="off"
                             />
                             {searchQuery.length > 0 && (
                                 <TouchableOpacity

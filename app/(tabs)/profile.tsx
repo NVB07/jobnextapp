@@ -193,9 +193,28 @@ export default function ProfileScreen() {
                 style: "destructive",
                 onPress: async () => {
                     try {
-                        await signOut();
+                        // Redirect to home before signing out to prevent hook error
+                        router.replace("/");
+
+                        // Add a small delay before actual signout to ensure navigation completes
+                        setTimeout(async () => {
+                            try {
+                                await signOut();
+                            } catch (error) {
+                                console.error("Logout error:", error);
+                                // Error is silently handled, user is already redirected
+                            }
+                        }, 100);
                     } catch (error) {
-                        Alert.alert("Lỗi", "Không thể đăng xuất. Vui lòng thử lại.");
+                        console.error("Navigation error:", error);
+                        // Try to sign out anyway
+                        try {
+                            await signOut();
+                        } catch (signOutError) {
+                            console.error("Logout error:", signOutError);
+                        }
+                        // Redirect to home as fallback
+                        router.replace("/");
                     }
                 },
             },
