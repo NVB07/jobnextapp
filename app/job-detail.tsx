@@ -29,6 +29,7 @@ export default function JobDetailScreen() {
     const initialJob: Job = params.jobData ? JSON.parse(params.jobData as string) : null;
     const canLoadDetails = params.canLoadDetails === "true";
     const fromInterview = params.fromInterview === "true";
+    const fromSavedJobs = params.fromSavedJobs === "true";
 
     // State for detailed job information
     const [job, setJob] = useState<JobWithDetail>(initialJob);
@@ -36,7 +37,8 @@ export default function JobDetailScreen() {
     const [detailsError, setDetailsError] = useState<string | null>(null);
 
     const [imageError, setImageError] = useState(false);
-    const [isBookmarked, setIsBookmarked] = useState(job?.isSaved || false);
+    // If coming from saved jobs, we know it's already bookmarked
+    const [isBookmarked, setIsBookmarked] = useState(fromSavedJobs || job?.isSaved || false);
     const [bookmarkLoading, setBookmarkLoading] = useState(false);
 
     // Current user state

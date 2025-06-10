@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useNavigation } from "expo-router";
 import { useLayoutEffect } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -48,7 +49,17 @@ export default function SavedJobsScreen() {
         navigation.setOptions({
             headerShown: false,
         });
-    }, [navigation]);
+
+        // Add focus listener for navigation events
+        const unsubscribe = navigation.addListener("focus", () => {
+            if (user?.uid && savedJobs.data.length > 0) {
+                console.log("Navigation focus event triggered");
+                fetchSavedJobs(1, true);
+            }
+        });
+
+        return unsubscribe;
+    }, [navigation, user?.uid]);
 
     // Show loading if still checking auth
     if (authLoading || !isAuthenticated) {
@@ -137,9 +148,27 @@ export default function SavedJobsScreen() {
         }
     };
 
+    // Fetch saved jobs on initial load
     useEffect(() => {
         fetchSavedJobs(1);
     }, [user?.uid]);
+
+    // Refresh data when screen comes into focus (returning from job detail)
+    useFocusEffect(
+        React.useCallback(() => {
+            // Skip initial render by checking if we're coming back from another screen
+            const isReturning = savedJobs.data.length > 0;
+
+            if (isReturning && user?.uid) {
+                console.log("Screen focused, refreshing saved jobs list");
+                // Clear cache for this user and force refresh
+                listsCache.clearUserCache(user.uid);
+                fetchSavedJobs(1, true);
+            }
+
+            return () => {}; // cleanup function
+        }, [user?.uid, savedJobs.data.length])
+    );
 
     const renderHeader = () => (
         <LinearGradient colors={colors.gradient} style={[styles.header, { paddingTop: insets.top + 10 }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
@@ -212,7 +241,12 @@ export default function SavedJobsScreen() {
                     onPress={() => {
                         router.push({
                             pathname: "/job-detail",
-                            params: { jobId: job._id },
+                            params: {
+                                jobId: job._id,
+                                jobData: JSON.stringify(job),
+                                canLoadDetails: (!!job.url).toString(),
+                                fromSavedJobs: "true",
+                            },
                         });
                     }}
                     activeOpacity={0.8}
