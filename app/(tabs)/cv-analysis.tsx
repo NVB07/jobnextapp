@@ -392,48 +392,7 @@ export default function CVAnalysisScreen() {
         },
     });
 
-    useEffect(() => {
-        if (user?.uid) {
-            fetchUserData();
-        }
-    }, [user]);
-
-    // Auto refresh when screen comes into focus (e.g., when returning from profile screen after CV upload or profile update)
-    useFocusEffect(
-        React.useCallback(() => {
-            if (user?.uid) {
-                console.log("CV Analysis screen focused - refreshing data");
-                refreshData();
-            }
-        }, [user?.uid])
-    );
-
-    const renderHeader = () => (
-        <LinearGradient colors={colors.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.header, { paddingTop: insets.top }]}>
-            <Text style={[styles.headerTitle]}> Phân tích CV</Text>
-            <Text style={styles.headerSubtitle}>Phân tích chi tiết CV của bạn với AI thông minh</Text>
-        </LinearGradient>
-    );
-
-    if (!user) {
-        return (
-            <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
-                <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
-
-                {renderHeader()}
-
-                <View style={styles.loginPrompt}>
-                    <Ionicons name="person-circle-outline" size={80} color="#9CA3AF" />
-                    <Text style={[styles.promptTitle, { color: Colors[colorScheme ?? "light"].text }]}>Vui lòng đăng nhập</Text>
-                    <Text style={[styles.promptSubtitle, { color: Colors[colorScheme ?? "light"].text }]}>Bạn cần đăng nhập để xem thông tin phân tích CV của mình</Text>
-                    <TouchableOpacity style={[styles.loginButton, { backgroundColor: Colors[colorScheme ?? "light"].tint }]} onPress={() => router.push("/login")}>
-                        <Text style={styles.loginButtonText}>Đăng nhập ngay</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-        );
-    }
-
+    // Render functions must be defined before useMemo hooks
     const renderOverviewCard = () => {
         console.log("🔍 Rendering overview card...");
         console.log("📊 userData:", {
@@ -748,6 +707,23 @@ export default function CVAnalysisScreen() {
         );
     };
 
+    // All hooks must be called before any conditional returns
+    useEffect(() => {
+        if (user?.uid) {
+            fetchUserData();
+        }
+    }, [user]);
+
+    // Auto refresh when screen comes into focus (e.g., when returning from profile screen after CV upload or profile update)
+    useFocusEffect(
+        React.useCallback(() => {
+            if (user?.uid) {
+                console.log("CV Analysis screen focused - refreshing data");
+                refreshData();
+            }
+        }, [user?.uid])
+    );
+
     // Memoize the overview card to prevent unnecessary re-renders
     const memoizedOverviewCard = useMemo(() => {
         console.log("🔄 Memoizing overview card");
@@ -784,6 +760,32 @@ export default function CVAnalysisScreen() {
                 : userData.userData.recommend
             : null,
     ]);
+
+    const renderHeader = () => (
+        <LinearGradient colors={colors.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.header, { paddingTop: insets.top }]}>
+            <Text style={[styles.headerTitle]}> Phân tích CV</Text>
+            <Text style={styles.headerSubtitle}>Phân tích chi tiết CV của bạn với AI thông minh</Text>
+        </LinearGradient>
+    );
+
+    if (!user) {
+        return (
+            <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? "light"].background }]}>
+                <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
+
+                {renderHeader()}
+
+                <View style={styles.loginPrompt}>
+                    <Ionicons name="person-circle-outline" size={80} color="#9CA3AF" />
+                    <Text style={[styles.promptTitle, { color: Colors[colorScheme ?? "light"].text }]}>Vui lòng đăng nhập</Text>
+                    <Text style={[styles.promptSubtitle, { color: Colors[colorScheme ?? "light"].text }]}>Bạn cần đăng nhập để xem thông tin phân tích CV của mình</Text>
+                    <TouchableOpacity style={[styles.loginButton, { backgroundColor: Colors[colorScheme ?? "light"].tint }]} onPress={() => router.push("/login")}>
+                        <Text style={styles.loginButtonText}>Đăng nhập ngay</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
+    }
 
     if (loading) {
         return (
