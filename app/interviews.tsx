@@ -99,7 +99,7 @@ export default function InterviewsScreen() {
             setInterviews(response);
             setCurrentPage(page);
         } catch (error) {
-            console.error("Error fetching interviews:", error);
+            console.log("Error fetching interviews:", error);
             Alert.alert("Lỗi", "Không thể tải danh sách phỏng vấn");
         } finally {
             setLoading(false);
@@ -166,7 +166,7 @@ export default function InterviewsScreen() {
                                 Alert.alert("Lỗi", "Không thể xóa phỏng vấn");
                             }
                         } catch (error) {
-                            console.error("Error deleting interview:", error);
+                            console.log("Error deleting interview:", error);
                             Alert.alert("Lỗi", "Không thể xóa phỏng vấn");
                         } finally {
                             setDeleting(false);
@@ -175,7 +175,7 @@ export default function InterviewsScreen() {
                 },
             ]);
         } catch (error) {
-            console.error("Error preparing to delete interview:", error);
+            console.log("Error preparing to delete interview:", error);
             Alert.alert("Lỗi", "Không thể xóa phỏng vấn");
         }
     };

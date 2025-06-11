@@ -35,7 +35,7 @@ class AuthService {
             await SecureStore.setItemAsync(USER_ID_KEY, user.uid);
             console.log("Auth data stored successfully");
         } catch (error) {
-            console.error("Error storing auth data:", error);
+            console.log("Error storing auth data:", error);
             // Don't throw this error - let the calling code handle it
         }
     }
@@ -46,7 +46,7 @@ class AuthService {
             await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
             await SecureStore.deleteItemAsync(USER_ID_KEY);
         } catch (error) {
-            console.error("Error removing auth data:", error);
+            console.log("Error removing auth data:", error);
         }
     }
 
@@ -57,7 +57,7 @@ class AuthService {
             const userId = await SecureStore.getItemAsync(USER_ID_KEY);
             return { accessToken, userId };
         } catch (error) {
-            console.error("Error getting stored auth data:", error);
+            console.log("Error getting stored auth data:", error);
             return { accessToken: null, userId: null };
         }
     }
@@ -87,7 +87,7 @@ class AuthService {
             console.log("Sign in completed successfully");
             return this.userToAuthUser(user);
         } catch (error: any) {
-            console.error("Email sign in error:", error);
+            console.log("Google sign in error:", error.code);
             throw new Error(this.getErrorMessage(error.code));
         }
     }
@@ -114,7 +114,7 @@ class AuthService {
             console.log("Sign up completed successfully");
             return this.userToAuthUser(user);
         } catch (error: any) {
-            console.error("Email sign up error:", error);
+            console.log("Email sign up error:", error);
             throw new Error(this.getErrorMessage(error.code));
         }
     }
@@ -126,7 +126,6 @@ class AuthService {
             // This is a placeholder - implementation depends on platform
             throw new Error("Google sign-in not implemented for mobile yet");
         } catch (error: any) {
-            console.error("Google sign in error:", error);
             throw new Error(this.getErrorMessage(error.code));
         }
     }
@@ -137,7 +136,7 @@ class AuthService {
             await signOut(auth);
             await this.removeAuthData();
         } catch (error) {
-            console.error("Sign out error:", error);
+            console.log("Sign out error:", error);
             throw error;
         }
     }
@@ -168,6 +167,8 @@ class AuthService {
     // Get error message in Vietnamese
     private getErrorMessage(errorCode: string): string {
         switch (errorCode) {
+            case "auth/invalid-credential":
+                return "Email hoặc mật khẩu không đúng";
             case "auth/invalid-email":
                 return "Email không hợp lệ";
             case "auth/user-disabled":
@@ -209,7 +210,7 @@ class AuthService {
                 throw new Error("Failed to create user in database");
             }
         } catch (error) {
-            console.error("Error creating user in database:", error);
+            console.log("Error creating user in database:", error);
             throw error;
         }
     }

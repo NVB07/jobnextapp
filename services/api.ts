@@ -539,8 +539,8 @@ class ApiService {
 
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error(`❌ API Error: ${response.status} ${response.statusText}`);
-                console.error(`❌ Error Response:`, errorText);
+                console.log(`❌ API Error: ${response.status} ${response.statusText}`);
+                console.log(`❌ Error Response:`, errorText);
                 throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
             }
 
@@ -549,7 +549,7 @@ class ApiService {
             // console.log(`📊 Full Response:`, data);
             return data;
         } catch (error) {
-            console.error("🚨 API request failed:", error);
+            console.log("🚨 API request failed:", error);
             throw error;
         }
     }
@@ -661,7 +661,7 @@ class ApiService {
             });
 
             if (!response.ok) {
-                console.error(`❌ Job Detail API Error: ${response.status} ${response.statusText}`);
+                console.log(`❌ Job Detail API Error: ${response.status} ${response.statusText}`);
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
@@ -677,7 +677,7 @@ class ApiService {
 
             return data;
         } catch (error) {
-            console.error("🚨 Job Detail API request failed:", error);
+            console.log("🚨 Job Detail API request failed:", error);
             throw error;
         }
     }
@@ -781,7 +781,7 @@ class ApiService {
             const response = await this.request<BlogPost>(`/blogs/${blogId}`);
             return response;
         } catch (error) {
-            console.error("Error fetching blog by ID:", error);
+            console.log("Error fetching blog by ID:", error);
             throw error;
         }
     }
@@ -799,7 +799,7 @@ class ApiService {
 
             return response.data || response;
         } catch (error) {
-            console.error("Error analyzing CV:", error);
+            console.log("Error analyzing CV:", error);
             throw error;
         }
     }
@@ -849,7 +849,7 @@ class ApiService {
 
             return userData;
         } catch (error) {
-            console.error(`❌ Failed to fetch user data for uid: ${uid}`, error);
+            console.log(`❌ Failed to fetch user data for uid: ${uid}`, error);
             return null;
         }
     }
@@ -864,7 +864,7 @@ class ApiService {
 
             return response;
         } catch (error) {
-            console.error(`❌ Failed to update user profile for uid: ${uid}`, error);
+            console.log(`❌ Failed to update user profile for uid: ${uid}`, error);
             return { success: false, message: "Lỗi khi cập nhật thông tin" };
         }
     }
@@ -875,7 +875,7 @@ class ApiService {
             const response = await this.request<{ message: string; timestamp: string }>(`ping`);
             return `${response.message} at ${response.timestamp}`;
         } catch (error) {
-            console.error("Ping failed:", error);
+            console.log("Ping failed:", error);
             throw new Error("Could not reach server");
         }
     }
@@ -940,7 +940,7 @@ class ApiService {
                 },
             };
         } catch (error) {
-            console.error("❌ Hybrid search failed:", error);
+            console.log("❌ Hybrid search failed:", error);
             throw error;
         }
     }
@@ -1003,7 +1003,7 @@ class ApiService {
                 },
             };
         } catch (error) {
-            console.error("❌ Fallback search failed:", error);
+            console.log("❌ Fallback search failed:", error);
             throw error;
         }
     }
@@ -1024,7 +1024,7 @@ class ApiService {
 
             return response;
         } catch (error) {
-            console.error("Failed to save job:", error);
+            console.log("Failed to save job:", error);
             throw error;
         }
     }
@@ -1044,7 +1044,7 @@ class ApiService {
 
             return response;
         } catch (error) {
-            console.error("Failed to unsave job:", error);
+            console.log("Failed to unsave job:", error);
             throw error;
         }
     }
@@ -1057,7 +1057,7 @@ class ApiService {
                 count: response.pagination?.totalJobs || 0,
             };
         } catch (error) {
-            console.error("Error getting saved jobs count:", error);
+            console.log("Error getting saved jobs count:", error);
             return { count: 0 };
         }
     }
@@ -1108,7 +1108,7 @@ class ApiService {
 
             return result;
         } catch (error) {
-            console.error("Error getting saved jobs:", error);
+            console.log("Error getting saved jobs:", error);
             return {
                 data: [],
                 pagination: {
@@ -1134,7 +1134,7 @@ class ApiService {
             });
 
             if (!response.ok) {
-                console.error(`❌ Interviews API Error: ${response.status} ${response.statusText}`);
+                console.log(`❌ Interviews API Error: ${response.status} ${response.statusText}`);
                 return { count: 0 };
             }
 
@@ -1144,7 +1144,7 @@ class ApiService {
                 count: data.pagination?.totalInterviews || 0,
             };
         } catch (error) {
-            console.error("Error getting interviews count:", error);
+            console.log("Error getting interviews count:", error);
             return { count: 0 };
         }
     }
@@ -1187,7 +1187,7 @@ class ApiService {
             });
 
             if (!response.ok) {
-                console.error(`❌ Interviews API Error: ${response.status} ${response.statusText}`);
+                console.log(`❌ Interviews API Error: ${response.status} ${response.statusText}`);
                 return {
                     data: [],
                     pagination: {
@@ -1219,7 +1219,7 @@ class ApiService {
 
             return result;
         } catch (error) {
-            console.error("Error getting interviews:", error);
+            console.log("Error getting interviews:", error);
             return {
                 data: [],
                 pagination: {
@@ -1271,7 +1271,7 @@ class ApiService {
             const data = await response.json();
             return data;
         } catch (error) {
-            console.error("🚨 CV upload failed:", error);
+            console.log("🚨 CV upload failed:", error);
             throw error;
         }
     }
@@ -1411,7 +1411,7 @@ class ApiService {
                     // Make sure to clear the interval if there's an error
                     clearInterval(progressInterval);
 
-                    console.error("🚨 CV upload error:", error);
+                    console.log("🚨 CV upload error:", error);
                     if (callbacks.onError) {
                         callbacks.onError({
                             success: false,
@@ -1422,7 +1422,7 @@ class ApiService {
                     reject(error);
                 }
             } catch (error) {
-                console.error("🚨 Upload preparation error:", error);
+                console.log("🚨 Upload preparation error:", error);
                 if (callbacks.onError) {
                     callbacks.onError({
                         success: false,
@@ -1489,7 +1489,7 @@ class InterviewService {
 
             return await response.json();
         } catch (error) {
-            console.error("Interview API error:", error);
+            console.log("Interview API error:", error);
             throw error;
         }
     }
@@ -1523,7 +1523,7 @@ class InterviewService {
 
             return result;
         } catch (error) {
-            console.error("Delete interview API error:", error);
+            console.log("Delete interview API error:", error);
             throw error;
         }
     }
@@ -1542,7 +1542,7 @@ class InterviewService {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                console.error(`❌ API error:`, errorData);
+                console.log(`❌ API error:`, errorData);
                 throw new Error(errorData.message || "Failed to get interview");
             }
 
@@ -1551,7 +1551,7 @@ class InterviewService {
 
             return result;
         } catch (error) {
-            console.error("❌ Get interview API error:", error);
+            console.log("❌ Get interview API error:", error);
             throw error;
         }
     }
@@ -1596,14 +1596,14 @@ class InterviewService {
                 return { exists: false };
             }
         } catch (error) {
-            console.error("❌ Check existing interview API error:", error);
+            console.log("❌ Check existing interview API error:", error);
             return { exists: false };
         }
     }
 
     parseInterviewResponse(result: string): InterviewMessage {
         if (!result || typeof result !== "string") {
-            console.error("❌ Invalid input to parseInterviewResponse:", result);
+            console.log("❌ Invalid input to parseInterviewResponse:", result);
             return {
                 id: Date.now(),
                 message: "Không thể phân tích phản hồi do dữ liệu không hợp lệ",
@@ -1618,7 +1618,7 @@ class InterviewService {
             console.log(`🔍 Attempting to parse JSON: ${raw.substring(0, 100)}...`);
             return JSON.parse(raw);
         } catch (jsonError) {
-            console.error("❌ JSON parse error:", jsonError);
+            console.log("❌ JSON parse error:", jsonError);
 
             try {
                 // Fallback parsing for malformed JSON
@@ -1636,7 +1636,7 @@ class InterviewService {
                     state: stateMatch ? stateMatch[1] === "true" : true,
                 };
             } catch (regexError) {
-                console.error("❌ Regex fallback error:", regexError);
+                console.log("❌ Regex fallback error:", regexError);
                 return {
                     id: Date.now(),
                     message: "Không thể phân tích phản hồi, vui lòng thử lại",
@@ -1670,7 +1670,7 @@ class InterviewService {
                         aiMessage.id = messages.length + 1;
                         messages.push(aiMessage);
                     } catch (error) {
-                        console.error(`❌ Error parsing AI message at index ${i}:`, error);
+                        console.log(`❌ Error parsing AI message at index ${i}:`, error);
                     }
                 }
 
@@ -1685,14 +1685,14 @@ class InterviewService {
                         };
                         messages.push(userMessage);
                     } catch (error) {
-                        console.error(`❌ Error parsing user message at index ${i + 1}:`, error);
+                        console.log(`❌ Error parsing user message at index ${i + 1}:`, error);
                     }
                 }
             }
 
             console.log(`✅ Successfully parsed ${messages.length} messages from chat history`);
         } catch (error) {
-            console.error("❌ Error in parseChatHistoryToMessages:", error);
+            console.log("❌ Error in parseChatHistoryToMessages:", error);
         }
 
         return messages;

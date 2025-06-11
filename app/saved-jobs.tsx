@@ -85,7 +85,7 @@ export default function SavedJobsScreen() {
                 setExpiredJobsCount(expiredCount);
             }
         } catch (error) {
-            console.error("Error fetching saved jobs:", error);
+            console.log("Error fetching saved jobs:", error);
             Alert.alert("Lỗi", "Không thể tải danh sách công việc đã lưu");
         } finally {
             setLoading(false);
@@ -120,7 +120,7 @@ export default function SavedJobsScreen() {
                             }
                         }
                     } catch (error) {
-                        console.error("Error unsaving job:", error);
+                        console.log("Error unsaving job:", error);
                         Alert.alert("Lỗi", "Không thể bỏ lưu công việc này");
                     }
                 },

@@ -203,7 +203,7 @@ export default function JobsScreen() {
                     hasIndustry: !!data?.userData?.profile?.Industry,
                 });
             } catch (error) {
-                console.error("❌ Error fetching user data:", error);
+                console.log("❌ Error fetching user data:", error);
                 setUserData(null);
             } finally {
                 setUserDataLoading(false);
@@ -286,7 +286,7 @@ export default function JobsScreen() {
             setSearchHasMorePages(page < (response.totalPages || 1));
             setSearchTotalJobs(response.totalJobs || 0);
         } catch (err) {
-            console.error("❌ Error fetching search jobs:", err);
+            console.log("❌ Error fetching search jobs:", err);
             setSearchError("Không thể tải danh sách việc làm. Vui lòng thử lại.");
             if (reset) {
                 setSearchJobs([]);
@@ -437,7 +437,7 @@ export default function JobsScreen() {
                         endpoint: "jobs/search",
                     });
                 } catch (fallbackError) {
-                    console.error("❌ Both endpoints failed:", {
+                    console.log("❌ Both endpoints failed:", {
                         primary: primaryError,
                         fallback: fallbackError,
                     });
@@ -492,7 +492,7 @@ export default function JobsScreen() {
             }
         } catch (err) {
             // Global catch - should not normally reach here due to improved error handling above
-            console.error("❌ Unexpected error in fetchRecommendedJobs:", err);
+            console.log("❌ Unexpected error in fetchRecommendedJobs:", err);
             setRecommendedError("Có lỗi không mong đợi xảy ra. Vui lòng thử lại.");
             if (reset) {
                 setRecommendedJobs([]);
@@ -537,7 +537,7 @@ export default function JobsScreen() {
                         setSearchCurrentPage(nextPage);
                         setSearchHasMorePages(nextPage < (response.totalPages || 1));
                     } catch (err) {
-                        console.error("❌ Error loading more search jobs:", err);
+                        console.log("❌ Error loading more search jobs:", err);
                     } finally {
                         setSearchLoadingMore(false);
                     }
@@ -583,7 +583,7 @@ export default function JobsScreen() {
             setSearchTotalPages(response.totalPages || 1);
             setSearchHasMorePages(response.currentPage < response.totalPages);
         } catch (err) {
-            console.error("❌ Error searching jobs:", err);
+            console.log("❌ Error searching jobs:", err);
             setSearchError("Không thể tìm kiếm việc làm. Vui lòng thử lại.");
         } finally {
             setSearchLoading(false);
@@ -605,7 +605,7 @@ export default function JobsScreen() {
                 },
             });
         } catch (err) {
-            console.error("❌ Error navigating to job detail:", err);
+            console.log("❌ Error navigating to job detail:", err);
             Alert.alert("Lỗi", "Không thể mở trang chi tiết việc làm. Vui lòng thử lại.");
         }
     };
@@ -855,7 +855,7 @@ export default function JobsScreen() {
                     setUserData(data);
                     console.log("🔄 User data refreshed");
                 } catch (error) {
-                    console.error("❌ Error refreshing user data:", error);
+                    console.log("❌ Error refreshing user data:", error);
                 }
             }
 
@@ -884,7 +884,7 @@ export default function JobsScreen() {
             // Success haptic feedback
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         } catch (error) {
-            console.error("❌ Error during refresh:", error);
+            console.log("❌ Error during refresh:", error);
             // Error haptic feedback
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             Alert.alert("Lỗi", "Không thể làm mới dữ liệu. Vui lòng thử lại.");

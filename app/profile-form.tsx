@@ -335,7 +335,7 @@ export default function ProfileFormScreen() {
                 setInitialFormData(initialData);
             }
         } catch (error) {
-            console.error("Error fetching user data:", error);
+            console.log("Error fetching user data:", error);
             Alert.alert("Lỗi", "Không thể tải thông tin người dùng");
         } finally {
             setLoading(false);
@@ -376,7 +376,7 @@ export default function ProfileFormScreen() {
                 Alert.alert("Lỗi", response.message || "Cập nhật thông tin thất bại");
             }
         } catch (error) {
-            console.error("Error saving form:", error);
+            console.log("Error saving form:", error);
             Alert.alert("Lỗi", "Có lỗi xảy ra khi lưu thông tin");
         } finally {
             setSaving(false);

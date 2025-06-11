@@ -151,7 +151,7 @@ export default function HomeScreen() {
                 setTopCompanies(companiesResponse.companies.slice(0, 10)); // Lấy 10 công ty top
                 setTotalCompanies(companiesResponse.totalCompanies || 0);
             } catch (error) {
-                console.error("Error fetching home data:", error);
+                console.log("Error fetching home data:", error);
                 // Set fallback values
                 setTotalJobs(0);
                 setTotalCompanies(0);

@@ -28,7 +28,7 @@ export default function BlogDetailScreen() {
                 setBlog(blogData);
                 setLoading(false);
             } catch (error) {
-                console.error("Error parsing blog data:", error);
+                console.log("Error parsing blog data:", error);
                 setLoading(false);
             }
         }

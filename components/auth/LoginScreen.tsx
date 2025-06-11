@@ -7,7 +7,6 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { useAuth } from "../../contexts/AuthContext";
 import { router } from "expo-router";
-import { IconSymbol } from "../ui/IconSymbol";
 
 // Validation schemas
 const loginSchema = yup.object().shape({

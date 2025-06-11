@@ -55,8 +55,7 @@ export default function ProfileScreen() {
     const colorScheme = useColorScheme();
     const colors = Colors[colorScheme ?? "light"];
     const insets = useSafeAreaInsets();
-    const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-    const [darkModeEnabled, setDarkModeEnabled] = useState(colorScheme === "dark");
+
     const [userStats, setUserStats] = useState<UserStats>({
         interviews: 0,
         savedJobs: 0,
@@ -100,7 +99,7 @@ export default function ProfileScreen() {
                 expiredJobs: expiredJobsCount,
             });
         } catch (error) {
-            console.error("Error fetching user stats:", error);
+            console.log("Error fetching user stats:", error);
             // Keep default values on error
         }
     };
@@ -113,7 +112,7 @@ export default function ProfileScreen() {
             const data = await apiService.getUserData(user.uid);
             setUserCVData(data);
         } catch (error) {
-            console.error("Error fetching user CV data:", error);
+            console.log("Error fetching user CV data:", error);
             // Keep default values on error
         }
     };
@@ -152,39 +151,6 @@ export default function ProfileScreen() {
         }, [isAuthenticated, user?.uid])
     );
 
-    const profileCompleteness = 75;
-
-    const achievements: Achievement[] = [
-        {
-            id: 1,
-            title: "CV Chuyên nghiệp",
-            description: "Hoàn thành hồ sơ với điểm số trên 80",
-            icon: "star.fill",
-            color: ["#6366f1", "#8b5cf6"] as [string, string],
-            unlocked: true,
-        },
-        {
-            id: 2,
-            title: "Ứng viên Tích cực",
-            description: "Ứng tuyển hơn 20 vị trí",
-            icon: "briefcase.fill",
-            color: ["#10b981", "#34d399"] as [string, string],
-            unlocked: true,
-        },
-        {
-            id: 3,
-            title: "Phỏng vấn Xuất sắc",
-            description: "Có tỷ lệ chuyển đổi phỏng vấn cao",
-            icon: "trophy.fill",
-            color: ["#f59e0b", "#fbbf24"] as [string, string],
-            unlocked: false,
-        },
-    ];
-
-    const handleSettingsPress = (setting: string) => {
-        Alert.alert("Cài đặt", `Bạn đã chọn: ${setting}`);
-    };
-
     const handleLogout = async () => {
         Alert.alert("Đăng xuất", "Bạn có chắc muốn đăng xuất khỏi ứng dụng?", [
             { text: "Hủy", style: "cancel" },
@@ -193,28 +159,10 @@ export default function ProfileScreen() {
                 style: "destructive",
                 onPress: async () => {
                     try {
-                        // Redirect to home before signing out to prevent hook error
-                        router.replace("/");
-
-                        // Add a small delay before actual signout to ensure navigation completes
-                        setTimeout(async () => {
-                            try {
-                                await signOut();
-                            } catch (error) {
-                                console.error("Logout error:", error);
-                                // Error is silently handled, user is already redirected
-                            }
-                        }, 100);
+                        await signOut();
+                        // router.replace("/(tabs)");
                     } catch (error) {
-                        console.error("Navigation error:", error);
-                        // Try to sign out anyway
-                        try {
-                            await signOut();
-                        } catch (signOutError) {
-                            console.error("Logout error:", signOutError);
-                        }
-                        // Redirect to home as fallback
-                        router.replace("/");
+                        console.log("Logout error:", error);
                     }
                 },
             },
@@ -236,16 +184,6 @@ export default function ProfileScreen() {
         }
     };
 
-    const showToast = (message: string) => {
-        if (Platform.OS === "android") {
-            ToastAndroid.show(message, ToastAndroid.SHORT);
-        } else {
-            // On iOS we would use a custom toast component
-            // For now we'll use console.log
-            console.log(message);
-        }
-    };
-
     const pickDocument = async () => {
         try {
             const result = await DocumentPicker.getDocumentAsync({
@@ -258,7 +196,7 @@ export default function ProfileScreen() {
             }
         } catch (error) {
             Alert.alert("Lỗi", "Không thể chọn file CV");
-            console.error(error);
+            console.log(error);
         }
     };
 
@@ -323,7 +261,7 @@ export default function ProfileScreen() {
 
                 // Handle errors
                 onError: (error) => {
-                    console.error("Upload error:", error);
+                    console.log("Upload error:", error);
                     setUploadStatusText(error.message || "Tải lên thất bại");
                     setUploadComplete(true);
                     setUploadSuccess(false);
@@ -331,7 +269,7 @@ export default function ProfileScreen() {
                 },
             });
         } catch (error) {
-            console.error("Error in handleUploadCV:", error);
+            console.log("Error in handleUploadCV:", error);
             setUploadStatusText("Lỗi xử lý");
             setUploadComplete(true);
             setUploadSuccess(false);

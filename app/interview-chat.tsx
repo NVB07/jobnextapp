@@ -265,14 +265,14 @@ export default function InterviewChatScreen() {
 
             // Check if we got a valid response with the expected structure
             if (!response || !response.result) {
-                console.error("❌ Invalid response format:", response);
+                console.log("❌ Invalid response format:", response);
                 throw new Error("Định dạng phản hồi từ API không hợp lệ");
             }
 
             const interview = response.result;
 
             if (!interview || !interview.chatHistory || !Array.isArray(interview.chatHistory)) {
-                console.error("❌ Invalid interview data:", interview);
+                console.log("❌ Invalid interview data:", interview);
                 throw new Error("Dữ liệu phỏng vấn không hợp lệ");
             }
 
@@ -329,7 +329,7 @@ export default function InterviewChatScreen() {
 
             console.log(`✅ Successfully loaded interview by ID with ${existingMessages.length} messages`);
         } catch (error) {
-            console.error("❌ Error loading interview by ID:", error);
+            console.log("❌ Error loading interview by ID:", error);
             Alert.alert("Lỗi", "Không thể tải cuộc phỏng vấn. " + (error instanceof Error ? error.message : "Lỗi không xác định"), [
                 { text: "Quay lại", onPress: () => router.back() },
             ]);
@@ -392,7 +392,7 @@ export default function InterviewChatScreen() {
             // No existing interview, create new one
             await createNewInterview(token, false);
         } catch (error) {
-            console.error("Error starting interview:", error);
+            console.log("Error starting interview:", error);
             Alert.alert("Lỗi", "Có lỗi xảy ra khi tạo phỏng vấn");
         } finally {
             setIsLoading(false);
@@ -439,7 +439,7 @@ export default function InterviewChatScreen() {
             setMessages([messageObj]);
             setInterviewEnded(!messageObj.state);
         } catch (error) {
-            console.error("❌ Error creating new interview:", error);
+            console.log("❌ Error creating new interview:", error);
             Alert.alert("Lỗi", "Có lỗi xảy ra khi tạo phỏng vấn mới");
         }
     };
@@ -459,7 +459,7 @@ export default function InterviewChatScreen() {
 
             console.log(`✅ Loaded existing interview with ${existingMessages.length} messages`);
         } catch (error) {
-            console.error("Error loading existing interview:", error);
+            console.log("Error loading existing interview:", error);
             Alert.alert("Lỗi", "Có lỗi khi tải phỏng vấn cũ. Sẽ tạo phỏng vấn mới.");
             // Fallback to create new interview
             auth.currentUser?.getIdToken().then(createNewInterview);
@@ -520,7 +520,7 @@ export default function InterviewChatScreen() {
                 }, 1000);
             }
         } catch (error) {
-            console.error("❌ Error sending message:", error);
+            console.log("❌ Error sending message:", error);
             Alert.alert("Lỗi", "Có lỗi xảy ra khi gửi tin nhắn");
         } finally {
             setIsLoading(false);
@@ -613,7 +613,7 @@ export default function InterviewChatScreen() {
                                                         // Reset interview ended state
                                                         setInterviewEnded(false);
                                                     } catch (error) {
-                                                        console.error("❌ Error restarting interview:", error);
+                                                        console.log("❌ Error restarting interview:", error);
                                                         Alert.alert("Lỗi", "Không thể khởi động lại cuộc phỏng vấn");
                                                     } finally {
                                                         setIsLoading(false);

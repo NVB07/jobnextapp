@@ -68,7 +68,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     console.log("❌ No authenticated user found");
                 }
             } catch (error) {
-                console.error("❌ Error initializing auth:", error);
+                console.log("❌ Error initializing auth:", error);
                 if (mounted) {
                     setUser(null);
                 }
@@ -124,7 +124,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     }
                 }
             } catch (error) {
-                console.error("❌ Error in onAuthStateChanged:", error);
+                console.log("❌ Error in onAuthStateChanged:", error);
                 // Don't throw this error - it would break the auth state management
             }
         });
@@ -138,7 +138,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser(authUser);
             return authUser;
         } catch (error) {
-            console.error("Sign in error:", error);
+            // console.log("Sign in error:", error);
             throw error;
         }
     };
@@ -156,7 +156,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser(authUser);
             return authUser;
         } catch (error) {
-            console.error("Sign up error:", error);
+            console.log("Sign up error:", error);
             throw error;
         }
     };
@@ -166,7 +166,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             await authService.signOut();
             setUser(null);
         } catch (error) {
-            console.error("Sign out error:", error);
+            console.log("Sign out error:", error);
             throw error;
         }
     };

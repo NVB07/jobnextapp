@@ -84,7 +84,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ visible, onClose, onSucc
             }
             reset();
         } catch (error: any) {
-            Alert.alert(isRegister ? "Lỗi đăng ký" : "Lỗi đăng nhập", error.message || "Có lỗi xảy ra, vui lòng thử lại");
+            Alert.alert(isRegister ? "Lỗi đăng ký" : "Lỗi đăng nhập", error.message || "Sai email hoặc mật khẩu");
         } finally {
             setLoading(false);
         }

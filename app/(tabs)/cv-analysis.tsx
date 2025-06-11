@@ -123,7 +123,7 @@ export default function CVAnalysisScreen() {
             }
 
             // If we reach here, we don't know how to handle the data
-            console.error("❌ Unknown data format:", typeof md);
+            console.log("❌ Unknown data format:", typeof md);
             return {
                 error: "Định dạng dữ liệu không được hỗ trợ",
                 danhGiaUuDiem: "",
@@ -133,7 +133,7 @@ export default function CVAnalysisScreen() {
                 luuY: "",
             };
         } catch (error) {
-            console.error("❌ Error parsing content:", error);
+            console.log("❌ Error parsing content:", error);
             return {
                 error: "Lỗi khi phân tích dữ liệu",
                 danhGiaUuDiem: "",
@@ -163,7 +163,7 @@ export default function CVAnalysisScreen() {
                 console.log("⚠️ No data found during refresh");
             }
         } catch (error) {
-            console.error("❌ Error refreshing data:", error);
+            console.log("❌ Error refreshing data:", error);
             // Don't show error UI on refresh failure
         } finally {
             setRefreshing(false);
@@ -206,7 +206,7 @@ export default function CVAnalysisScreen() {
                 setUserData(null);
             }
         } catch (error) {
-            console.error("❌ Error fetching user data:", error);
+            console.log("❌ Error fetching user data:", error);
             setError("Không thể tải dữ liệu người dùng. Vui lòng thử lại.");
         } finally {
             setLoading(false);

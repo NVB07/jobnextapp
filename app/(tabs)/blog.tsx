@@ -50,7 +50,7 @@ export default function BlogScreen() {
 
             setBlogs(response.blogs || []);
         } catch (err) {
-            console.error("❌ Error fetching blogs:", err);
+            console.log("❌ Error fetching blogs:", err);
             setError("Không thể tải danh sách blog. Vui lòng thử lại.");
             setBlogs([]);
         } finally {

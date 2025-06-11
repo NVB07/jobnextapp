@@ -82,7 +82,7 @@ export default function VirtualInterviewScreen() {
                     setUseUserReview(false);
                 }
             } catch (error) {
-                console.error("❌ Error fetching user data:", error);
+                console.log("❌ Error fetching user data:", error);
                 setUserData(null);
                 setUseUserReview(false);
             } finally {

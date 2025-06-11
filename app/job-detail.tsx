@@ -62,7 +62,7 @@ export default function JobDetailScreen() {
                     setCurrentUserId(null);
                 }
             } catch (error) {
-                console.error("❌ Error checking authentication:", error);
+                console.log("❌ Error checking authentication:", error);
                 setCurrentUserId(null);
             }
         };
@@ -114,7 +114,7 @@ export default function JobDetailScreen() {
                     stopLoadingAnimations();
                 }
             } catch (err) {
-                console.error("❌ Error loading job details:", err);
+                console.log("❌ Error loading job details:", err);
                 setDetailsError("Không thể tải thông tin chi tiết. Vui lòng thử lại.");
                 stopLoadingAnimations();
             } finally {
@@ -182,7 +182,7 @@ export default function JobDetailScreen() {
                 title: job.title,
             });
         } catch (error) {
-            console.error("Error sharing:", error);
+            console.log("Error sharing:", error);
         }
     };
 
@@ -227,7 +227,7 @@ export default function JobDetailScreen() {
                 }
             }
         } catch (error: any) {
-            console.error("❌ Error bookmarking job:", error);
+            console.log("❌ Error bookmarking job:", error);
 
             // Handle specific error cases
             if (error.message?.includes("Đã lưu job này rồi")) {
