@@ -587,31 +587,27 @@ export default function InterviewChatScreen() {
                                                             return;
                                                         }
 
-                                                        // Make sure we have the latest interview details
-                                                        if (interviewDetails && !interviewData.jobRequirements) {
-                                                            interviewData.jobRequirements = interviewDetails.jobRequirement;
-                                                            interviewData.userInfo = interviewDetails.candidateDescription;
-                                                            interviewData.jobTitle = interviewDetails.jobTitle;
-                                                            interviewData.company = interviewDetails.company;
-                                                            interviewData.jobId = interviewDetails.jobId;
-                                                            interviewData.jobSource = interviewDetails.jobSource;
-                                                            interviewData.uid = user.uid;
-
-                                                            console.log("🔄 Updated interview data from details:", {
-                                                                jobTitle: interviewData.jobTitle,
-                                                                hasJobRequirements: !!interviewData.jobRequirements,
-                                                                hasUserInfo: !!interviewData.userInfo,
-                                                                uid: interviewData.uid,
-                                                            });
+                                                        if (!interviewId) {
+                                                            Alert.alert("Lỗi", "Không tìm thấy ID phỏng vấn");
+                                                            return;
                                                         }
 
                                                         const token = await currentUser.getIdToken();
 
-                                                        // Force create new interview
-                                                        await createNewInterview(token, true, interviewId || undefined);
+                                                        // Use restart API instead of delete and create new
+                                                        const result = await interviewService.restartInterview(interviewId, token);
+
+                                                        // Parse the first AI response after restart
+                                                        const messageObj = interviewService.parseInterviewResponse(result.result);
+                                                        messageObj.id = 1;
+
+                                                        // Reset messages to only contain the new first message
+                                                        setMessages([messageObj]);
 
                                                         // Reset interview ended state
-                                                        setInterviewEnded(false);
+                                                        setInterviewEnded(!messageObj.state);
+
+                                                        console.log("✅ Interview restarted successfully");
                                                     } catch (error) {
                                                         console.log("❌ Error restarting interview:", error);
                                                         Alert.alert("Lỗi", "Không thể khởi động lại cuộc phỏng vấn");

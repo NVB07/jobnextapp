@@ -481,6 +481,7 @@ export default function ProfileScreen() {
                             <TouchableOpacity
                                 style={[
                                     styles.uploadButton,
+
                                     {
                                         backgroundColor: selectedFile && !selectedFile.canceled ? colors.tint : colors.border,
                                         opacity: selectedFile && !selectedFile.canceled ? 1 : 0.6,
@@ -488,7 +489,9 @@ export default function ProfileScreen() {
                                 ]}
                                 onPress={handleUploadCV}
                             >
-                                <ThemedText style={styles.uploadButtonText}>Tải lên</ThemedText>
+                                <ThemedText style={[styles.uploadButtonText, { color: selectedFile && !selectedFile.canceled ? "white" : colors.text }]}>
+                                    Tải lên
+                                </ThemedText>
                             </TouchableOpacity>
                         </View>
                     </TouchableOpacity>

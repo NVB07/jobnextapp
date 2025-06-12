@@ -1601,6 +1601,37 @@ class InterviewService {
         }
     }
 
+    async restartInterview(interviewId: string, token: string): Promise<InterviewResponse> {
+        try {
+            console.log(`🔄 Restarting interview with ID: ${interviewId}`);
+
+            const response = await fetch(`${this.baseUrl}/interviews/restart/${interviewId}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || "Failed to restart interview");
+            }
+
+            const result = await response.json();
+            console.log(`✅ Interview restarted successfully`);
+
+            return {
+                message: result.message,
+                result: result.result,
+                interviewId: result.interviewId,
+            };
+        } catch (error) {
+            console.log("❌ Restart interview API error:", error);
+            throw error;
+        }
+    }
+
     parseInterviewResponse(result: string): InterviewMessage {
         if (!result || typeof result !== "string") {
             console.log("❌ Invalid input to parseInterviewResponse:", result);
